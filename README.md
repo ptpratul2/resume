@@ -1,6 +1,6 @@
 ## Resume
 
-For Automate job Applicant Creation Using Frappe
+For Automate job Applicant Creation Using Frappe Framework
 
 #### License
 
