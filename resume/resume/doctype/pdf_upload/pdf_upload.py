@@ -85,34 +85,148 @@ def extract_text_with_ocr(file_path):
     except Exception as e:
         raise ValueError(f"Error extracting text with OCR: {e}")
 
-
 def parse_pdf_text(text):
     applicant_data = {"applicant_name": "", "email": "", "phone": ""}
 
-    # Regex patterns
-    phone_pattern = re.compile(r'\b(?:\+?\d{1,4}[-.\s]?)?(?:\d{10}|\d{5}[-.\s]?\d{5})\b')
-    email_pattern = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
-    name_pattern = re.compile(r'^[A-Za-z\s.,-]{3,}$')
+    if not isinstance(text, str):
+        text = str(text) if text else ""
+    if not text or len(text.strip()) < 3:
+        raise ValueError("Applicant name not found.")
 
-    # Extract email
-    email_match = email_pattern.search(text)
-    if email_match:
-        applicant_data["email"] = email_match.group()
+    try:
+        email_pattern = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
+        phone_pattern = re.compile(r'\b(?:\+?\d{1,4}[-.\s]?)?(?:\d{10}|\d{5}[-.\s]?\d{5})\b')
+        email_match = email_pattern.search(text)
+        if email_match:
+            applicant_data["email"] = email_match.group()
+        phone_match = phone_pattern.search(text)
+        if phone_match:
+            applicant_data["phone"] = phone_match.group()
+    except:
+        pass
 
-    # Extract phone number
-    phone_match = phone_pattern.search(text)
-    if phone_match:
-        applicant_data["phone"] = phone_match.group()
+    exclude = {'curriculum', 'curriculam', 'vitae', 'resume', 'cv', 'objective', 'profile', 'summary',
+               'experience', 'education', 'qualification', 'skills', 'contact', 'email', 'phone',
+               'address', 'developer', 'engineer', 'designer', 'manager', 'analyst', 'consultant',
+               'nationality', 'india', 'marital', 'status', 'passing', 'year', 'responsibility',
+               'role', 'society', 'institute', 'electronic', 'rajput', 'village', 'personal',
+               'information', 'applied', 'industrial', 'mern', 'stack', 'development', 'board',
+               'june', 'july', 'august', 'september', 'october', 'november', 'december', 'january',
+               'february', 'march', 'april', 'may', 'para', 'arya', 'flat', 'floor', 'basic',
+               'acadmic', 'credentials', 'college', 'ward', 'tehsil', 'district', 'madhya', 'pradesh',
+               'training', 'honest', 'and', 'thanking', 'you', 'core', 'competencies', 'human',
+               'resource', 'department', 'iti', 'i', 't', 'higher', 'secondary', 'examination',
+               'traditionally', 'professional', 'apr', 'new', 'kosad', 'can', 'hindi', 'look',
+               'forward', 'positive', 'proficient', 'git', 'for', 'suthar', 'sbsstc', 'ferozepur'}
 
-    # Extract name by finding the first non-empty line with no numbers
-    lines = [line.strip() for line in text.split("\n") if line.strip()]
-    for line in lines:
-        if name_pattern.match(line) and not any(char.isdigit() for char in line):
-            applicant_data["applicant_name"] = line
-            break
+    try:
+        lines = [l.strip() for l in text.split('\n') if l.strip()][:30]
+    except:
+        lines = []
 
-    # Validation
+    # Strategy 1: Pattern-based
+    try:
+        for line in lines[:20]:
+            if '@' in line or re.search(r'[\/\\()\[\]{}]', line):
+                continue
+            if re.search(r'\d', line):
+                parts = re.split(r'\s{3,}', line)
+                if parts:
+                    line = parts[0]
+            if len(line) > 40:
+                continue
+            line_clean = re.sub(r'^(Name|Full Name)[:\-\s]+', '', line, flags=re.IGNORECASE).strip()
+            words = [w.strip('.,:-') for w in line_clean.split() if w.strip('.,:-') and w.isalpha()]
+            if 2 <= len(words) <= 4 and all(w[0].isupper() for w in words):
+                name_str = ' '.join(words)
+                if any(len(w) >= 3 for w in words) and not any(ex in name_str.lower() for ex in exclude):
+                    applicant_data["applicant_name"] = name_str
+                    return applicant_data
+    except:
+        pass
+
+    # Strategy 2: NLP
+    try:
+        nlp = spacy.load('en_core_web_sm')
+        for line in lines[:15]:
+            if '@' in line or re.search(r'\d', line) or len(line) > 40:
+                continue
+            doc = nlp(line)
+            for ent in doc.ents:
+                if ent.label_ == 'PERSON':
+                    name = ent.text.strip()
+                    words = [w for w in name.split() if w.isalpha()]
+                    if 2 <= len(words) <= 4 and not any(ex in name.lower() for ex in exclude):
+                        applicant_data["applicant_name"] = name
+                        return applicant_data
+    except:
+        pass
+
+    # Strategy 3: Look for "Name:" pattern aggressively
+    try:
+        for line in lines[:30]:
+            if re.search(r'\b(Name|Full Name|Candidate Name|Applicant Name)\s*[:\-]', line, re.IGNORECASE):
+                # Extract everything after "Name:" until line end or special chars
+                match = re.search(r'\b(?:Name|Full Name|Candidate Name|Applicant Name)\s*[:\-]\s*([A-Z][a-zA-Z\s\.]+?)(?:\s{3,}|\||$|[0-9])', line, re.IGNORECASE)
+                if match:
+                    candidate = match.group(1).strip()
+                    # Clean up dots and extra spaces
+                    candidate = re.sub(r'\.+', ' ', candidate).strip()
+                    words = [w for w in candidate.split() if w.isalpha() and len(w) >= 2]
+                    if 1 <= len(words) <= 4:
+                        name_str = ' '.join(words)
+                        if len(name_str) >= 3 and not any(ex in name_str.lower() for ex in exclude):
+                            applicant_data["applicant_name"] = name_str
+                            return applicant_data
+    except:
+        pass
+
+    # Strategy 4: Simple capitalized lines
+    try:
+        for line in lines[:25]:
+            if '@' in line or len(line) > 50:
+                continue
+            if 5 <= len(line) <= 35 and all(c.isalpha() or c.isspace() for c in line):
+                words = [w for w in line.split() if w.isalpha()]
+                if 2 <= len(words) <= 4 and all(w[0].isupper() for w in words):
+                    if not any(ex in line.lower() for ex in exclude):
+                        applicant_data["applicant_name"] = line.strip()
+                        return applicant_data
+    except:
+        pass
+
+    # Strategy 5: Last resort
+    try:
+        for line in lines[:25]:
+            words = [w for w in line.split() if w.isalpha() and len(w) >= 2]
+            if 2 <= len(words) <= 4:
+                candidate = ' '.join(words)
+                if candidate[0].isupper() and len(candidate) >= 5:
+                    candidate_lower = candidate.lower()
+                    if not any(candidate_lower == ex or candidate_lower.startswith(ex + ' ') or
+                              candidate_lower.endswith(' ' + ex) or (' ' + ex + ' ') in candidate_lower
+                              for ex in exclude):
+                        applicant_data["applicant_name"] = candidate
+                        return applicant_data
+    except:
+        pass
+
+    # Strategy 6: Absolute fallback
+    try:
+        for line in lines:
+            words = [w for w in line.split() if w and w[0].isupper() and w.isalpha() and len(w) >= 2]
+            if len(words) >= 2:
+                candidate = ' '.join(words[:2])
+                candidate_lower = candidate.lower()
+                if not any(candidate_lower == ex or candidate_lower.startswith(ex + ' ') or
+                          candidate_lower.endswith(' ' + ex) or (' ' + ex + ' ') in candidate_lower
+                          for ex in exclude):
+                    applicant_data["applicant_name"] = candidate
+                    return applicant_data
+    except:
+        pass
+
     if not applicant_data["applicant_name"]:
         raise ValueError("Applicant name not found.")
-    
+
     return applicant_data
