@@ -1,232 +1,222 @@
+
+
 import frappe
 import os
+import json
+import mimetypes
 from pdfminer.high_level import extract_text
 from frappe.model.document import Document
-import re
 import pytesseract
-from PIL import Image
 from pdf2image import convert_from_path
+from PIL import Image
+import docx  # For .docx files
+import google.generativeai as genai
 
 class PDFUpload(Document):
     pass
 
 @frappe.whitelist()
 def process_pdfs(docname):
-    """Reads uploaded PDF files, extracts text, and creates Job Applicant records."""
-    doc = frappe.get_doc("PDF Upload", docname)
+    """Enqueues the processing job for all types of files."""
+    frappe.enqueue("resume.resume.doctype.pdf_upload.pdf_upload.process_files_background", queue="long", docname=docname)
+    frappe.msgprint("File processing has been queued in the background.")
 
-    if not doc.get("files"):
-        frappe.throw("No PDF files uploaded")
-
-    for file_entry in doc.get("files"):
-        file_url = file_entry.get("file_upload")
-
-        if not file_url:
-            frappe.throw("Missing file URL in one of the entries.")
+# --- AI Logic (UNCHANGED as per request) ---
+@frappe.whitelist()
+def list_available_gemini_models():
+    """List available Gemini models for debugging."""
+    try:
+        api_key = frappe.conf.get("gemini_api_key")
+        if not api_key:
+            return {"error": "Gemini API key missing in site_config.json"}
         
-        # Determine if the file is public or private
-        if file_url.startswith("/private/files/"):
-            file_path = frappe.get_site_path(file_url.lstrip("/"))
-        elif file_url.startswith("/files/"):
-            file_path = frappe.get_site_path("public" + file_url)
-        else:
-            frappe.throw(f"Invalid file path: {file_url}")
-
-        # Validate file existence
-        if not os.path.exists(file_path):
-            frappe.throw(f"File not found on server: {file_path}")
-
-        try:
-            # Extract text using pdfminer
-            text = extract_text(file_path)
-            
-            # If text extraction failed, try using OCR
-            if not text.strip():
-                text = extract_text_with_ocr(file_path)
-        except Exception as e:
-            frappe.throw(f"Error extracting text from PDF: {e}")
-
-        # Parse extracted text
-        applicant_data = parse_pdf_text(text)
-        print(applicant_data)
+        genai.configure(api_key=api_key)
+        models = genai.list_models()
+        available_models = []
+        model_details = []
+        for model in models:
+            if 'generateContent' in model.supported_generation_methods:
+                model_name = model.name
+                model_id = model_name.replace('models/', '')
+                available_models.append(model_id)
+                model_details.append({
+                    "full_name": model_name,
+                    "model_id": model_id,
+                    "display_name": getattr(model, 'display_name', 'N/A'),
+                    "supported_methods": list(model.supported_generation_methods)
+                })
         
-        if not applicant_data.get("applicant_name") or not applicant_data.get("email") or not applicant_data.get("phone"):
-            frappe.throw(f"Missing required fields in {file_url}")
+        frappe.logger().info(f"Available Gemini models: {available_models}")
+        return {"available_models": available_models, "model_details": model_details}
+    except Exception as e:
+        frappe.logger().error(f"Error listing Gemini models: {str(e)}")
+        return {"error": str(e)}
 
-        # Check if applicant already exists using email
-        if frappe.db.exists("Job Applicant", {"email_id": applicant_data["email"]}):
-            frappe.msgprint(f"Applicant with email {applicant_data['email']} already exists.")
-            continue
+def parse_with_gemini(text, job_title=None, job_description=None):
+    """AI Logic: Send resume text to Gemini model and return structured JSON."""
+    # (No changes made to this function as requested)
+    try:
+        api_key = frappe.conf.get("gemini_api_key")
+        if not api_key:
+            raise Exception("Gemini API key missing in site_config.json")
 
-        # Create new Job Applicant record
-        applicant = frappe.get_doc({
-            "doctype": "Job Applicant",
-            "applicant_name": applicant_data["applicant_name"],
-            "email_id": applicant_data["email"],
-            "resume_attachment": file_url,
-            "status": "Open",
-            "phone_number": applicant_data["phone"],
-            "job_title": doc.job_title,
-            "designation": doc.designation,
-        })
-        applicant.insert(ignore_permissions=True)
+        genai.configure(api_key=api_key)
+        prompt_path = frappe.get_app_path("resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt")
+        with open(prompt_path, "r") as f:
+            prompt_template = f.read()
 
-    frappe.msgprint("All Job Applicants Created Successfully")
+        prompt = prompt_template.replace("{{RESUME_TEXT}}", text)
+        prompt = prompt.replace("{{JOB_TITLE}}", job_title or "N/A")
+        prompt = prompt.replace("{{JOB_DESCRIPTION}}", job_description or "N/A")
 
+        model_names = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+        last_error = None
+        skipped_models = []
+        
+        def try_models(models_to_try):
+            nonlocal last_error
+            for model_name in models_to_try:
+                try:
+                    frappe.logger().info(f"Attempting Gemini model: {model_name}")
+                    model = genai.GenerativeModel(model_name)
+                    response = model.generate_content(prompt)
+                    cleaned = response.text.strip()
+                    if cleaned.startswith("```json"): cleaned = cleaned[7:]
+                    if cleaned.endswith("```"): cleaned = cleaned[:-3]
+                    return json.loads(cleaned.strip())
+                except Exception as e:
+                    if "Computer Use tool" in str(e):
+                        skipped_models.append(model_name)
+                        continue
+                    last_error = e
+                    continue
+            return None
+
+        result = try_models(model_names)
+        if result: return result
+        
+        # Dynamic fallback
+        models = genai.list_models()
+        dynamic_models = [m.name.replace('models/', '') for m in models 
+                          if 'generateContent' in m.supported_generation_methods 
+                          and m.name.replace('models/', '') not in model_names]
+        return try_models(dynamic_models) or (lambda: exec('raise last_error'))()
+    except Exception as e:
+        frappe.logger().error(f"Gemini parsing failed: {e}")
+        raise
+
+# --- Text Extraction Logic (Enhanced for all formats) ---
+
+def extract_text_from_any_file(file_path):
+    """Detects file type and extracts text accordingly."""
+    ext = os.path.splitext(file_path)[1].lower()
+    text = ""
+
+    frappe.logger().info(f"Starting extraction for file: {file_path} with extension: {ext}")
+
+    if ext == ".pdf":
+        text = extract_text(file_path)
+        if not text.strip():
+            frappe.logger().info(f"PDF looks like an image, starting OCR: {file_path}")
+            text = extract_text_with_ocr(file_path)
+    
+    elif ext == ".docx":
+        doc = docx.Document(file_path)
+        text = "\n".join([para.text for para in doc.paragraphs])
+    
+    elif ext in [".jpg", ".jpeg", ".png"]:
+        text = pytesseract.image_to_string(Image.open(file_path))
+    
+    elif ext == ".txt":
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            text = f.read()
+    
+    else:
+        frappe.logger().warning(f"Unsupported file format: {ext}")
+        return None
+
+    return text.strip()
 
 def extract_text_with_ocr(file_path):
-    """Extract text from scanned PDFs using Tesseract OCR."""
+    """OCR for Scanned PDFs."""
     try:
         images = convert_from_path(file_path)
-        extracted_text = ""
-        for image in images:
-            extracted_text += pytesseract.image_to_string(image)
-        return extracted_text.strip()
+        return "\n".join([pytesseract.image_to_string(img) for img in images])
     except Exception as e:
-        raise ValueError(f"Error extracting text with OCR: {e}")
+        frappe.logger().error(f"OCR Error: {str(e)}")
+        return ""
 
-def parse_pdf_text(text):
-    applicant_data = {"applicant_name": "", "email": "", "phone": ""}
+# --- Background Job (Enhanced Logging) ---
 
-    if not isinstance(text, str):
-        text = str(text) if text else ""
-    if not text or len(text.strip()) < 3:
-        raise ValueError("Applicant name not found.")
-
+def process_files_background(docname):
+    """Processes any uploaded file, extracts text, and creates Applicants."""
     try:
-        email_pattern = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
-        phone_pattern = re.compile(r'\b(?:\+?\d{1,4}[-.\s]?)?(?:\d{10}|\d{5}[-.\s]?\d{5})\b')
-        email_match = email_pattern.search(text)
-        if email_match:
-            applicant_data["email"] = email_match.group()
-        phone_match = phone_pattern.search(text)
-        if phone_match:
-            applicant_data["phone"] = phone_match.group()
-    except:
-        pass
+        doc = frappe.get_doc("PDF Upload", docname)
+        if not doc.get("files"):
+            frappe.logger().warning(f"PDF Upload {docname}: No files found.")
+            return
 
-    exclude = {'curriculum', 'curriculam', 'vitae', 'resume', 'cv', 'objective', 'profile', 'summary',
-               'experience', 'education', 'qualification', 'skills', 'contact', 'email', 'phone',
-               'address', 'developer', 'engineer', 'designer', 'manager', 'analyst', 'consultant',
-               'nationality', 'india', 'marital', 'status', 'passing', 'year', 'responsibility',
-               'role', 'society', 'institute', 'electronic', 'rajput', 'village', 'personal',
-               'information', 'applied', 'industrial', 'mern', 'stack', 'development', 'board',
-               'june', 'july', 'august', 'september', 'october', 'november', 'december', 'january',
-               'february', 'march', 'april', 'may', 'para', 'arya', 'flat', 'floor', 'basic',
-               'acadmic', 'credentials', 'college', 'ward', 'tehsil', 'district', 'madhya', 'pradesh',
-               'training', 'honest', 'and', 'thanking', 'you', 'core', 'competencies', 'human',
-               'resource', 'department', 'iti', 'i', 't', 'higher', 'secondary', 'examination',
-               'traditionally', 'professional', 'apr', 'new', 'kosad', 'can', 'hindi', 'look',
-               'forward', 'positive', 'proficient', 'git', 'for', 'suthar', 'sbsstc', 'ferozepur'}
+        for file_entry in doc.get("files"):
+            file_url = file_entry.get("file_upload")
+            if not file_url: continue
+            
+            # File Path logic
+            if file_url.startswith("/private/files/"):
+                file_path = frappe.get_site_path(file_url.lstrip("/"))
+            else:
+                file_path = frappe.get_site_path("public" + file_url)
 
-    try:
-        lines = [l.strip() for l in text.split('\n') if l.strip()][:30]
-    except:
-        lines = []
-
-    # Strategy 1: Pattern-based
-    try:
-        for line in lines[:20]:
-            if '@' in line or re.search(r'[\/\\()\[\]{}]', line):
+            if not os.path.exists(file_path):
+                frappe.logger().error(f"File not found on server: {file_path}")
                 continue
-            if re.search(r'\d', line):
-                parts = re.split(r'\s{3,}', line)
-                if parts:
-                    line = parts[0]
-            if len(line) > 40:
+
+            # 1. Extract Text
+            try:
+                text = extract_text_from_any_file(file_path)
+                if not text:
+                    frappe.logger().error(f"Could not extract any text from {file_url}")
+                    continue
+            except Exception as e:
+                frappe.logger().error(f"Extraction error for {file_url}: {str(e)}")
                 continue
-            line_clean = re.sub(r'^(Name|Full Name)[:\-\s]+', '', line, flags=re.IGNORECASE).strip()
-            words = [w.strip('.,:-') for w in line_clean.split() if w.strip('.,:-') and w.isalpha()]
-            if 2 <= len(words) <= 4 and all(w[0].isupper() for w in words):
-                name_str = ' '.join(words)
-                if any(len(w) >= 3 for w in words) and not any(ex in name_str.lower() for ex in exclude):
-                    applicant_data["applicant_name"] = name_str
-                    return applicant_data
-    except:
-        pass
 
-    # Strategy 2: NLP
-    try:
-        nlp = spacy.load('en_core_web_sm')
-        for line in lines[:15]:
-            if '@' in line or re.search(r'\d', line) or len(line) > 40:
+            # 2. Parse with AI
+            try:
+                job_desc = frappe.db.get_value("Job Opening", doc.job_title, "description") if doc.job_title else None
+                applicant_data = parse_with_gemini(text, doc.job_title, job_desc)
+            except Exception as e:
+                 frappe.logger().error(f"AI Parsing failed for {file_url}: {str(e)}")
+                 continue
+            
+            # 3. Validation & Creation
+            email = applicant_data.get("email_id")
+            if not email or not applicant_data.get("applicant_name"):
+                frappe.logger().warning(f"Missing Name/Email in AI response for {file_url}")
                 continue
-            doc = nlp(line)
-            for ent in doc.ents:
-                if ent.label_ == 'PERSON':
-                    name = ent.text.strip()
-                    words = [w for w in name.split() if w.isalpha()]
-                    if 2 <= len(words) <= 4 and not any(ex in name.lower() for ex in exclude):
-                        applicant_data["applicant_name"] = name
-                        return applicant_data
-    except:
-        pass
 
-    # Strategy 3: Look for "Name:" pattern aggressively
-    try:
-        for line in lines[:30]:
-            if re.search(r'\b(Name|Full Name|Candidate Name|Applicant Name)\s*[:\-]', line, re.IGNORECASE):
-                # Extract everything after "Name:" until line end or special chars
-                match = re.search(r'\b(?:Name|Full Name|Candidate Name|Applicant Name)\s*[:\-]\s*([A-Z][a-zA-Z\s\.]+?)(?:\s{3,}|\||$|[0-9])', line, re.IGNORECASE)
-                if match:
-                    candidate = match.group(1).strip()
-                    # Clean up dots and extra spaces
-                    candidate = re.sub(r'\.+', ' ', candidate).strip()
-                    words = [w for w in candidate.split() if w.isalpha() and len(w) >= 2]
-                    if 1 <= len(words) <= 4:
-                        name_str = ' '.join(words)
-                        if len(name_str) >= 3 and not any(ex in name_str.lower() for ex in exclude):
-                            applicant_data["applicant_name"] = name_str
-                            return applicant_data
-    except:
-        pass
-
-    # Strategy 4: Simple capitalized lines
-    try:
-        for line in lines[:25]:
-            if '@' in line or len(line) > 50:
+            if frappe.db.exists("Job Applicant", {"email_id": email}):
+                frappe.logger().info(f"Skipping: Applicant {email} already exists.")
                 continue
-            if 5 <= len(line) <= 35 and all(c.isalpha() or c.isspace() for c in line):
-                words = [w for w in line.split() if w.isalpha()]
-                if 2 <= len(words) <= 4 and all(w[0].isupper() for w in words):
-                    if not any(ex in line.lower() for ex in exclude):
-                        applicant_data["applicant_name"] = line.strip()
-                        return applicant_data
-    except:
-        pass
 
-    # Strategy 5: Last resort
-    try:
-        for line in lines[:25]:
-            words = [w for w in line.split() if w.isalpha() and len(w) >= 2]
-            if 2 <= len(words) <= 4:
-                candidate = ' '.join(words)
-                if candidate[0].isupper() and len(candidate) >= 5:
-                    candidate_lower = candidate.lower()
-                    if not any(candidate_lower == ex or candidate_lower.startswith(ex + ' ') or
-                              candidate_lower.endswith(' ' + ex) or (' ' + ex + ' ') in candidate_lower
-                              for ex in exclude):
-                        applicant_data["applicant_name"] = candidate
-                        return applicant_data
-    except:
-        pass
+            try:
+                new_applicant = frappe.get_doc({
+                    "doctype": "Job Applicant",
+                    "applicant_name": applicant_data.get("applicant_name"),
+                    "email_id": email,
+                    "phone_number": applicant_data.get("phone_number"),
+                    "resume_attachment": file_url,
+                    "status": "Open",
+                    "job_title": doc.job_title,
+                    "designation": doc.designation,
+                    "applicant_rating": applicant_data.get("applicant_rating"),
+                    "score": applicant_data.get('score'),
+                    "fit_level": applicant_data.get('fit_level'),
+                    "justification_by_ai": applicant_data.get('justification_by_ai')
+                })
+                new_applicant.insert(ignore_permissions=True)
+                frappe.logger().info(f"Successfully Created Applicant: {new_applicant.name} from {file_url}")
+            except Exception as e:
+                frappe.logger().error(f"Database insertion failed for {email}: {str(e)}")
 
-    # Strategy 6: Absolute fallback
-    try:
-        for line in lines:
-            words = [w for w in line.split() if w and w[0].isupper() and w.isalpha() and len(w) >= 2]
-            if len(words) >= 2:
-                candidate = ' '.join(words[:2])
-                candidate_lower = candidate.lower()
-                if not any(candidate_lower == ex or candidate_lower.startswith(ex + ' ') or
-                          candidate_lower.endswith(' ' + ex) or (' ' + ex + ' ') in candidate_lower
-                          for ex in exclude):
-                    applicant_data["applicant_name"] = candidate
-                    return applicant_data
-    except:
-        pass
-
-    if not applicant_data["applicant_name"]:
-        raise ValueError("Applicant name not found.")
-
-    return applicant_data
+    except Exception as e:
+        frappe.logger().error(f"Critical error in background job {docname}: {str(e)}")
