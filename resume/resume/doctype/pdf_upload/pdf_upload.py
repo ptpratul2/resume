@@ -119,7 +119,11 @@ def extract_text_from_any_file(file_path):
     if ext == ".pdf":
         text = extract_text(file_path)
         if not text.strip():
-            frappe.logger().info(f"PDF looks like an image, starting OCR: {file_path}")
+            # frappe.logger().info(f"PDF looks like an image, starting OCR: {file_path}")
+            frappe.log_error(
+                title="trigger_ai_call file_path",
+                message=f"file_path: {file_path}"
+            )
             text = extract_text_with_ocr(file_path)
     
     elif ext == ".docx":
@@ -147,6 +151,43 @@ def extract_text_with_ocr(file_path):
     except Exception as e:
         frappe.logger().error(f"OCR Error: {str(e)}")
         return ""
+
+import base64
+def parse_with_gemini_file(file_path, job_title=None, job_description=None):
+    api_key = frappe.conf.get("gemini_api_key")
+    if not api_key:
+        raise Exception("Gemini API key missing in site_config.json")
+
+    genai.configure(api_key=api_key)
+    # model = get_gemini()
+    model = genai.GenerativeModel("gemini-2.5-pro")
+
+    with open(file_path, "rb") as f:
+        pdf_bytes = f.read()
+        
+    prompt_path = frappe.get_app_path("resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt")
+    with open(prompt_path, "r") as f:
+        prompt_template = f.read()
+
+    prompt = prompt_template.replace("{{RESUME_TEXT}}", "Resume attached as PDF.")
+    prompt = prompt.replace("{{JOB_TITLE}}", job_title or "N/A")
+    prompt = prompt.replace("{{JOB_DESCRIPTION}}", job_description or "N/A")
+
+    # prompt = PROMPT
+
+    response = model.generate_content(
+        [
+            {"mime_type": "application/pdf", "data": pdf_bytes},
+            prompt
+        ]
+    )
+
+    text = response.text.strip()
+
+    if text.startswith("```"):
+        text = text.replace("```json", "").replace("```", "").strip()
+
+    return json.loads(text)
 
 # --- Background Job (Enhanced Logging) ---
 
@@ -206,6 +247,7 @@ def process_files_background(docname):
                     "applicant_name": applicant_data.get("applicant_name"),
                     "email_id": email,
                     "phone_number": applicant_data.get("phone_number"),
+                    "custom_phone_number_2": applicant_data.get("custom_phone_number_2", ""),  # ADD THIS
                     "resume_attachment": file_url,
                     "status": "Open",
                     "job_title": doc.job_title,
