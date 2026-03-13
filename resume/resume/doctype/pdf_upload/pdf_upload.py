@@ -418,6 +418,7 @@ def process_files_background(docname):
                     "score": applicant_data.get("score"),
                     "fit_level": applicant_data.get("fit_level"),
                     "justification_by_ai": applicant_data.get("justification_by_ai"),
+                    "custom_yes":1
                 })
                 new_applicant.insert(ignore_permissions=True)
                 frappe.logger().info(f"Successfully Created Applicant: {new_applicant.name} from {file_url}")
