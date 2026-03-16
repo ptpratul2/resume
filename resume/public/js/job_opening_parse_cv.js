@@ -20,7 +20,7 @@ function update_upload_cv_button(frm) {
 
     frm.add_custom_button(__(button_label), () => {
         new frappe.ui.FileUploader({
-            allow_multiple: false,
+            allow_multiple: true,
             restrictions: {
                 allowed_file_types: ['.pdf', '.docx', '.txt', '.jpg', '.jpeg', '.png']
             },
