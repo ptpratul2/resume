@@ -1,7 +1,6 @@
 
 
 
-
 import frappe
 import os
 import json
@@ -307,10 +306,15 @@ def _extract_and_parse_file(args):
         return (file_url, None, str(e))
 
 
+
 def process_files_background(docname):
     """Processes uploaded files in parallel - multiple resumes parsed concurrently for speed."""
     import time
+    import os
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     t_start = time.perf_counter()
+
     try:
         doc = frappe.get_doc("PDF Upload", docname)
         if not doc.get("files"):
@@ -320,36 +324,50 @@ def process_files_background(docname):
         job_desc = frappe.db.get_value("Job Opening", doc.job_title, "description") if doc.job_title else None
         job_title = doc.job_title
 
-        # Pre-load for threads (no frappe in worker threads)
+        #  STEP 1: Get all existing emails once (FAST)
+        existing_emails = frappe.db.get_all("Job Applicant", fields=["email_id"])
+        existing_email_set = set([d.email_id for d in existing_emails if d.email_id])
+
+        print(" Existing Emails Loaded:", existing_email_set)
+
+        duplicate_emails = []
+
+        # Pre-load for threads
         api_key = frappe.conf.get("gemini_api_key")
         if not api_key:
             frappe.logger().error("Gemini API key missing in site_config.json")
             return
+
         prompt_path = frappe.get_app_path("resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt")
         with open(prompt_path, "r") as f:
             prompt_template = f.read()
 
-        # 1. Resolve file paths (fast, sequential)
+        # 1. Resolve file paths
         t_path_start = time.perf_counter()
         tasks = []
+
         for file_entry in doc.get("files"):
             file_url = file_entry.get("file_upload")
             if not file_url:
                 continue
+
             site_url = frappe.utils.get_url()
             if file_url.startswith(site_url):
                 file_url = file_url.split(site_url, 1)[1]
+
             if not file_url.startswith("/"):
                 file_url = "/" + file_url
 
             file_path = None
             file_list = frappe.get_all("File", filters={"file_url": file_url}, limit=1)
+
             if file_list:
                 try:
                     file_doc = frappe.get_doc("File", file_list[0].name)
                     file_path = file_doc.get_full_path()
                 except Exception:
                     pass
+
             if not file_path or not os.path.exists(file_path):
                 path_parts = file_url.lstrip("/").split("/") if file_url.startswith("/private") else ["public"] + file_url.lstrip("/").split("/")
                 file_path = os.path.abspath(frappe.get_site_path(*path_parts))
@@ -365,42 +383,49 @@ def process_files_background(docname):
             return
 
         t_path_elapsed = time.perf_counter() - t_path_start
-        frappe.logger().info(f"PDF Upload {docname}: Path resolution {t_path_elapsed:.2f}s for {len(tasks)} file(s)")
+        frappe.logger().info(f"Path resolved in {t_path_elapsed:.2f}s for {len(tasks)} files")
 
-        # 2. Parse files (2 at a time to avoid rate limits; retries on 429)
+        # 2. Parse files
         t_parse_start = time.perf_counter()
         workers = min(PARALLEL_WORKERS, len(tasks))
         results = []
+
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {}
             for i, t in enumerate(tasks):
                 if i > 0:
-                    time.sleep(2)  # Stagger starts to reduce rate limit spikes
+                    time.sleep(2)
                 futures[executor.submit(_extract_and_parse_file, t)] = t
+
             for future in as_completed(futures):
                 file_url, applicant_data, error_msg = future.result()
+
                 if error_msg:
                     frappe.logger().error(f"Parsing failed for {file_url}: {error_msg}")
                 elif applicant_data:
                     results.append((file_url, applicant_data))
 
         t_parse_elapsed = time.perf_counter() - t_parse_start
-        frappe.logger().info(f"PDF Upload {docname}: AI parsing {t_parse_elapsed:.2f}s ({len(results)}/{len(tasks)} parsed)")
+        frappe.logger().info(f"Parsing done in {t_parse_elapsed:.2f}s")
 
-        # 3. Create Job Applicants (fast, sequential - DB writes)
+        # 3. Create Job Applicants
         t_db_start = time.perf_counter()
+
         status_options = frappe.get_meta("Job Applicant").get_options("status") or ""
         valid_statuses = [s.strip() for s in status_options.split("\n") if s.strip()]
         default_status = "CV Submitted" if "CV Submitted" in valid_statuses else (valid_statuses[0] if valid_statuses else "Open")
 
         for file_url, applicant_data in results:
             email = applicant_data.get("email_id")
+
             if not email or not applicant_data.get("applicant_name"):
                 frappe.logger().warning(f"Missing Name/Email in AI response for {file_url}")
                 continue
 
-            if frappe.db.exists("Job Applicant", {"email_id": email}):
-                frappe.logger().info(f"Skipping: Applicant {email} already exists.")
+            if email in existing_email_set:
+                print(f" Duplicate Resumes Found: {email}")
+                frappe.logger().info(f"Duplicate: {email}")
+                duplicate_emails.append(email)
                 continue
 
             try:
@@ -418,18 +443,38 @@ def process_files_background(docname):
                     "score": applicant_data.get("score"),
                     "fit_level": applicant_data.get("fit_level"),
                     "justification_by_ai": applicant_data.get("justification_by_ai"),
-                    "custom_yes":1
+                    "custom_yes": 1
                 })
+
                 new_applicant.insert(ignore_permissions=True)
-                frappe.logger().info(f"Successfully Created Applicant: {new_applicant.name} from {file_url}")
+
+                existing_email_set.add(email)
+
+                frappe.logger().info(f"Created Applicant: {new_applicant.name}")
+
             except Exception as e:
-                frappe.logger().error(f"Database insertion failed for {email}: {str(e)}")
+                frappe.logger().error(f"DB insert failed for {email}: {str(e)}")
 
         t_db_elapsed = time.perf_counter() - t_db_start
+
+
+        if duplicate_emails:
+            message = (
+                f" Duplicate Resumes: {len(duplicate_emails)}<br><br>"
+                + "<br>".join(duplicate_emails)
+            )
+
+            frappe.msgprint(message)
+
+            #  Background job ke liye (important)
+            frappe.publish_realtime("msgprint", {"message": message})
+
+        else:
+            frappe.msgprint(" No Duplicate Resumes Found")
+
         t_total = time.perf_counter() - t_start
         frappe.logger().info(
-            f"PDF Upload {docname}: DB writes {t_db_elapsed:.2f}s | Total {t_total:.2f}s "
-            f"(path:{t_path_elapsed:.1f}s parse:{t_parse_elapsed:.1f}s db:{t_db_elapsed:.1f}s)"
+            f"Total Time: {t_total:.2f}s | Parse: {t_parse_elapsed:.2f}s | DB: {t_db_elapsed:.2f}s"
         )
 
     except Exception as e:
