@@ -1,0 +1,70 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-04-24 11:52:40.523310",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "education_level",
+  "name_of_institute",
+  "stream",
+  "class",
+  "year_passed",
+  "subjects"
+ ],
+ "fields": [
+  {
+   "fieldname": "education_level",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Education Level",
+   "options": "SSC\nHSC\nGraduation\nPost Graduation\nCourses\nIT Skills"
+  },
+  {
+   "fieldname": "name_of_institute",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Name of Institute"
+  },
+  {
+   "fieldname": "stream",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Stream"
+  },
+  {
+   "fieldname": "class",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Class"
+  },
+  {
+   "fieldname": "subjects",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Subjects"
+  },
+  {
+   "fieldname": "year_passed",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Year Passed"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-04-27 11:32:12.784792",
+ "modified_by": "Administrator",
+ "module": "Resume",
+ "name": "EDUCATION DETAILS",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

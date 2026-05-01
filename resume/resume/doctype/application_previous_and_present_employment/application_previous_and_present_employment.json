@@ -1,0 +1,82 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-04-24 12:04:27.604967",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "previous_present_employment_section",
+  "sr_no",
+  "name_of_employer",
+  "designation",
+  "reporting_to_name_contact_number_email_id",
+  "hr_details_of_company_name_email_id_contact_number",
+  "salary_drawn_per_year",
+  "reason_for_leaving"
+ ],
+ "fields": [
+  {
+   "fieldname": "previous_present_employment_section",
+   "fieldtype": "Section Break",
+   "label": "PREVIOUS PRESENT EMPLOYMENT"
+  },
+  {
+   "fieldname": "sr_no",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Sr No"
+  },
+  {
+   "fieldname": "name_of_employer",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Name of Employer"
+  },
+  {
+   "fieldname": "designation",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Designation"
+  },
+  {
+   "fieldname": "reporting_to_name_contact_number_email_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Reporting to Name Contact number Email ID "
+  },
+  {
+   "fieldname": "hr_details_of_company_name_email_id_contact_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "HR details of company Name Email ID contact number"
+  },
+  {
+   "fieldname": "salary_drawn_per_year",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Salary Drawn Per Year"
+  },
+  {
+   "fieldname": "reason_for_leaving",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Reason for leaving"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-04-24 12:56:18.591524",
+ "modified_by": "Administrator",
+ "module": "Resume",
+ "name": "Application PREVIOUS AND PRESENT EMPLOYMENT",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
