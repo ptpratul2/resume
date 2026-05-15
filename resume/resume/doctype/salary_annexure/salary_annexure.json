@@ -1,0 +1,115 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-05-01 16:52:46.824690",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_h54i",
+  "employee_name",
+  "salary_components",
+  "subtotal_a_monthly",
+  "subtotal_a_annual",
+  "subtotal_b_monthly",
+  "subtotal_b_annual",
+  "total_monthly",
+  "total_annual",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_h54i",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "label": "Name",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "salary_components",
+   "fieldtype": "Table",
+   "label": "Salary Components",
+   "options": "Salary Annexure Component"
+  },
+  {
+   "fieldname": "subtotal_a_monthly",
+   "fieldtype": "Currency",
+   "label": "Sub Total (A) Monthly",
+   "read_only": 1
+  },
+  {
+   "fieldname": "subtotal_a_annual",
+   "fieldtype": "Currency",
+   "label": "Sub Total (A) Annualized",
+   "read_only": 1
+  },
+  {
+   "fieldname": "subtotal_b_monthly",
+   "fieldtype": "Currency",
+   "label": "Sub Total (B) Monthly",
+   "read_only": 1
+  },
+  {
+   "fieldname": "subtotal_b_annual",
+   "fieldtype": "Currency",
+   "label": "Sub Total (B) Annualized",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_monthly",
+   "fieldtype": "Currency",
+   "label": "Total A + B Monthly",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_annual",
+   "fieldtype": "Currency",
+   "label": "Total A + B Annualized",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Salary Annexure",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-05-01 16:52:46.824690",
+ "modified_by": "Administrator",
+ "module": "Resume",
+ "name": "Salary Annexure",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

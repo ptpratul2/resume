@@ -1,0 +1,96 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-04-24 12:31:52.221212",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "reference_name",
+  "reference_email_id",
+  "designation",
+  "is_current_organization",
+  "relationship_with_applicant",
+  "column_break_qwya",
+  "landline_telephone_no",
+  "organization_name",
+  "known_period_monthsyears",
+  "mobile_phone_no"
+ ],
+ "fields": [
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Reference Name"
+  },
+  {
+   "fieldname": "organization_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Organization Name"
+  },
+  {
+   "fieldname": "designation",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Designation"
+  },
+  {
+   "fieldname": "is_current_organization",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Is Current Organization",
+   "options": "YES\nNO"
+  },
+  {
+   "fieldname": "landline_telephone_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Landline Telephone No"
+  },
+  {
+   "fieldname": "mobile_phone_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Mobile Phone No"
+  },
+  {
+   "fieldname": "known_period_monthsyears",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Known Period (Months/Years)"
+  },
+  {
+   "fieldname": "relationship_with_applicant",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Relationship With Applicant"
+  },
+  {
+   "fieldname": "reference_email_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Reference Email ID"
+  },
+  {
+   "fieldname": "column_break_qwya",
+   "fieldtype": "Column Break"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-05-13 12:25:04.734397",
+ "modified_by": "Administrator",
+ "module": "Resume",
+ "name": "Application Professional Reference Details",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
