@@ -44,6 +44,10 @@ def get_all_candidates():
                 "fit_level",
                 "score",
                 "custom_comments",
+                "custom_current_company",    
+                "custom_total_experience",  
+                "resume_attachment",
+                "owner",   
             ],
             order_by="creation desc",
             limit_page_length=0

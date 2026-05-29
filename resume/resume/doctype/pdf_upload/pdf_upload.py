@@ -556,6 +556,7 @@ from pdf2image import convert_from_path
 from PIL import Image
 import docx  # For .docx files
 import google.generativeai as genai
+from datetime import datetime
 
 # Max concurrent Gemini API calls - keep low to avoid rate limits (429)
 PARALLEL_WORKERS = 2
@@ -679,6 +680,9 @@ def parse_with_gemini(text, job_title=None, job_description=None):
         prompt_path = frappe.get_app_path("resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt")
         with open(prompt_path, "r") as f:
             prompt_template = f.read()
+        today_date = datetime.now().strftime("%B %Y")
+
+        prompt_template = prompt_template.replace("{{CURRENT_DATE}}", today_date)
 
         prompt = prompt_template.replace("{{RESUME_TEXT}}", text)
         prompt = prompt.replace("{{JOB_TITLE}}", job_title or "N/A")
@@ -813,6 +817,9 @@ def parse_with_gemini_file(file_path, job_title=None, job_description=None):
     prompt_path = frappe.get_app_path("resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt")
     with open(prompt_path, "r") as f:
         prompt_template = f.read()
+    today_date = datetime.now().strftime("%B %Y")
+
+    prompt_template = prompt_template.replace("{{CURRENT_DATE}}", today_date)
 
     prompt = prompt_template.replace("{{RESUME_TEXT}}", "Resume attached as PDF.")
     prompt = prompt.replace("{{JOB_TITLE}}", job_title or "N/A")
@@ -867,6 +874,9 @@ def _call_gemini_with_retry(call_fn):
 def _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc):
     """Thread-safe: parse text with Gemini. Retries on rate limit."""
     genai.configure(api_key=api_key)
+    today_date = datetime.now().strftime("%B %Y")
+
+    prompt_template = prompt_template.replace("{{CURRENT_DATE}}", today_date)
     prompt = prompt_template.replace("{{RESUME_TEXT}}", text)
     prompt = prompt.replace("{{JOB_TITLE}}", job_title or "N/A")
     prompt = prompt.replace("{{JOB_DESCRIPTION}}", job_desc or "N/A")
@@ -889,6 +899,9 @@ def _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc):
 def _parse_pdf_threadsafe(api_key, prompt_template, file_path, job_title, job_desc):
     """Thread-safe: send PDF to Gemini. Retries on rate limit."""
     genai.configure(api_key=api_key)
+    today_date = datetime.now().strftime("%B %Y")
+
+    prompt_template = prompt_template.replace("{{CURRENT_DATE}}", today_date)
     prompt = prompt_template.replace("{{RESUME_TEXT}}", "Resume attached as PDF.")
     prompt = prompt.replace("{{JOB_TITLE}}", job_title or "N/A")
     prompt = prompt.replace("{{JOB_DESCRIPTION}}", job_desc or "N/A")
@@ -1088,7 +1101,9 @@ def process_files_background(docname):
                     "score": applicant_data.get("score"),
                     "fit_level": applicant_data.get("fit_level"),
                     "justification_by_ai": applicant_data.get("justification_by_ai"),
-                    "custom_yes": 1
+                    "custom_yes": 1,
+                    "custom_current_company": applicant_data.get("custom_current_company"),
+                    "custom_total_experience": applicant_data.get("custom_total_experience")
                 })
                 new_applicant.insert(ignore_permissions=True)
                 created_names.append(new_applicant.name)

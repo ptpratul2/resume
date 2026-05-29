@@ -312,5 +312,8 @@ fixtures = [
         "filters": [
             ["role_name", "in", ["Interviewer"]]
         ]
-    }
+    },
+    {
+    "doctype": "Webhook"
+    },
 ]

@@ -259,6 +259,13 @@ def upload_and_process(job_opening=None):
                     "custom_current_role": flat_data["current_role"],
                     "custom_degree": flat_data["degree"],
                     "custom_institution": flat_data["institution"],
+                    "custom_current_company": applicant_data.get("custom_current_company")
+                    or (
+                        applicant_data.get("experience", [{}])[0].get("company_name", "")
+                        if applicant_data.get("experience")
+                        else ""
+                    ),
+                    "custom_total_experience": applicant_data.get("custom_total_experience", ""),
                 }
 
                 if job_opening:

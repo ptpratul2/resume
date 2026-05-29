@@ -61,8 +61,7 @@
   {
    "fieldname": "education",
    "fieldtype": "Attach",
-   "label": "Education",
-   "reqd": 1
+   "label": "Education"
   },
   {
    "fieldname": "column_break_cmwg",
@@ -72,15 +71,13 @@
    "fieldname": "bank_details",
    "fieldtype": "Attach",
    "in_list_view": 1,
-   "label": "Bank Details",
-   "reqd": 1
+   "label": "Bank Details"
   },
   {
    "fieldname": "pan",
    "fieldtype": "Attach",
    "in_list_view": 1,
-   "label": "Pan",
-   "reqd": 1
+   "label": "Pan"
   },
   {
    "fieldname": "medical",
@@ -96,7 +93,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-06 11:16:56.234337",
+ "modified": "2026-05-28 13:49:32.960575",
  "modified_by": "Administrator",
  "module": "Resume",
  "name": "Applicant Document",

@@ -1,6 +1,8 @@
 You are a highly skilled AI agent trained to compare and analyze resumes against job descriptions, with a strong focus on **structured and normalized data extraction**.
 
 Job Title: {{JOB_TITLE}}
+Current Date: {{CURRENT_DATE}}
+
 
 Job Description:
 
@@ -48,6 +50,19 @@ Extract skills from the resume using the following rules:
   * Overly granular system modules
 
 * Tools can be included ONLY if important (e.g., Excel, SAP, HRIS).
+
+
+**Total Experience Calculation**:
+    - Identify the 'Start Date' of the very first professional
+job/internship.
+    - **Case A**: If the latest job is "Present", "Current", or "Till
+Date", calculate duration from the first job's Start Date until
+{{CURRENT_DATE}}.
+    - **Case B**: If the latest job has a specific End Date, calculate
+duration until that specific date only.
+    - Result format: "X years Y months".
+**Current Company**: Identify the latest company marked as "Present".
+If the candidate has left their last job, return null or empty.
 
 ---
 
@@ -149,7 +164,10 @@ applicant_rating = score / 100
 "score": 0,
 "applicant_rating": 0.0,
 
-"justification_by_ai": ""
+"justification_by_ai": "",
+
+"custom_current_company":"",
+"custom_total_experience":""
 }
 
 ---

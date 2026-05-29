@@ -1,0 +1,92 @@
+[
+ {
+  "background_jobs_queue": null,
+  "condition": "doc.status == \"Accepted\"",
+  "docstatus": 0,
+  "doctype": "Webhook",
+  "enable_security": 0,
+  "enabled": 0,
+  "is_dynamic_url": 0,
+  "modified": "2026-05-14 09:37:20.648623",
+  "name": "Job Offer Auto",
+  "request_method": "POST",
+  "request_structure": "JSON",
+  "request_url": "https://demo.octavision.in/api/resource/Job Offer",
+  "timeout": 5,
+  "webhook_data": [],
+  "webhook_docevent": "after_insert",
+  "webhook_doctype": "Job Offer",
+  "webhook_headers": [
+   {
+    "key": "Content-Type",
+    "value": "application/json"
+   },
+   {
+    "key": "Authorization",
+    "value": "token 3cbb1044a1c500d:e43cc9def08e1a2"
+   }
+  ],
+  "webhook_json": "{\r\n  \"job_applicant\": \"{{ doc.job_applicant or '' }}\",\r\n  \"applicant_name\": \"{{ doc.applicant_name or '' }}\",\r\n  \"applicant_email\": \"{{ doc.applicant_email or '' }}\",\r\n  \"designation\": \"{{ doc.designation or '' }}\",\r\n  \"company\": \"{{ doc.company or '' }}\",\r\n  \"status\": \"{{ doc.status or '' }}\",\r\n  \"offer_date\": \"{{ doc.offer_date or '' }}\",\r\n\r\n  \"custom_offer_letter_pdf\": \"https://ats.vaaman.in/files/{{ doc.name }}.pdf\"\r\n}",
+  "webhook_secret": null
+ },
+ {
+  "background_jobs_queue": null,
+  "condition": "doc.status == \"Accepted\"",
+  "docstatus": 0,
+  "doctype": "Webhook",
+  "enable_security": 0,
+  "enabled": 0,
+  "is_dynamic_url": 0,
+  "modified": "2026-05-14 09:38:38.512528",
+  "name": "Test",
+  "request_method": "POST",
+  "request_structure": "JSON",
+  "request_url": "https://demo.octavision.in/api/resource/Job Offer",
+  "timeout": 5,
+  "webhook_data": [],
+  "webhook_docevent": "on_update",
+  "webhook_doctype": "Job Offer",
+  "webhook_headers": [
+   {
+    "key": "Content-Type",
+    "value": "application/json"
+   },
+   {
+    "key": "Authorization",
+    "value": "token 3cbb1044a1c500d:e43cc9def08e1a2"
+   }
+  ],
+  "webhook_json": "{\r\n  \"job_applicant\": \"{{ doc.job_applicant or '' }}\",\r\n  \"applicant_name\": \"{{ doc.applicant_name or '' }}\",\r\n  \"applicant_email\": \"{{ doc.applicant_email or '' }}\",\r\n  \"designation\": \"{{ doc.designation or '' }}\",\r\n  \"company\": \"{{ doc.company or '' }}\",\r\n  \"status\": \"{{ doc.status or '' }}\",\r\n  \"offer_date\": \"{{ doc.offer_date or '' }}\",\r\n\r\n  \"custom_offer_letter_pdf\": \"https://ats.vaaman.in/files/{{ doc.name }}.pdf\"\r\n}",
+  "webhook_secret": null
+ },
+ {
+  "background_jobs_queue": null,
+  "condition": "doc.status == \"Accepted\"",
+  "docstatus": 0,
+  "doctype": "Webhook",
+  "enable_security": 0,
+  "enabled": 1,
+  "is_dynamic_url": 0,
+  "modified": "2026-05-26 12:43:38.088676",
+  "name": "Demo",
+  "request_method": "POST",
+  "request_structure": "JSON",
+  "request_url": "https://demo.octavision.in/api/resource/Job Offer",
+  "timeout": 5,
+  "webhook_data": [],
+  "webhook_docevent": "on_change",
+  "webhook_doctype": "Job Offer",
+  "webhook_headers": [
+   {
+    "key": "Content-Type",
+    "value": "application/json"
+   },
+   {
+    "key": "Authorization",
+    "value": "token 3cbb1044a1c500d:e43cc9def08e1a2"
+   }
+  ],
+  "webhook_json": "{\r\n  \"job_applicant\": \"{{ doc.job_applicant or '' }}\",\r\n  \"applicant_name\": \"{{ doc.applicant_name or '' }}\",\r\n  \"applicant_email\": \"{{ doc.applicant_email or '' }}\",\r\n  \"designation\": \"{{ doc.designation or '' }}\",\r\n  \"company\": \"{{ doc.company or '' }}\",\r\n  \"status\": \"{{ doc.status or '' }}\",\r\n  \"offer_date\": \"{{ doc.offer_date or '' }}\",\r\n\r\n  \"custom_offer_letter_pdf\": \"https://ats.vaaman.in/files/{{ doc.name }}.pdf\"\r\n}",
+  "webhook_secret": null
+ }
+]

@@ -236,7 +236,7 @@
   "allow_guest_to_view": 0,
   "allow_import": 0,
   "allow_rename": 1,
-  "autoname": null,
+  "autoname": "field:email_id",
   "beta": 0,
   "color": null,
   "custom": 1,
@@ -1354,7 +1354,7 @@
     "sort_options": 0,
     "sticky": 0,
     "translatable": 0,
-    "unique": 0,
+    "unique": 1,
     "width": null
    },
    {
@@ -3652,10 +3652,10 @@
   "make_attachments_public": 0,
   "max_attachments": 0,
   "migration_hash": "5178213ed8043f12858f5c4ce076947c",
-  "modified": "2026-05-13 12:26:39.114211",
+  "modified": "2026-05-25 12:36:39.144217",
   "module": "Resume",
   "name": "Application Form",
-  "naming_rule": "",
+  "naming_rule": "By fieldname",
   "nsm_parent_field": null,
   "permissions": [
    {

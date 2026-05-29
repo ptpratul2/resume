@@ -438,48 +438,136 @@ def get_designation_options():
 
 
 
+# @frappe.whitelist(allow_guest=True)
+# def get_interviews():
+#     """Get list of interviews with interviewer details"""
+#     try:
+#         # --- NEW FILTERING LOGIC START ---
+#         user = frappe.session.user
+        
+#         # Check if the user has administrative privileges
+#         is_admin = frappe.db.exists("Has Role", {
+#             "parent": user, 
+#             "role": ["in", ["HR Manager", "System Manager"]]
+#         })
+
+#         # Build base filters for the parent Interview doc
+#         interview_filters = {}
+        
+#         # If not an admin, restrict to only interviews assigned to this user
+#         if not is_admin and user != "Guest":
+#             assigned_interviews = frappe.get_all(
+#                 "Interview Detail",
+#                 filters={"interviewer": user},
+#                 fields=["parent"]
+#             )
+            
+#             # If they have no assigned interviews, return empty data immediately
+#             if not assigned_interviews:
+#                 return {"message": "Success", "data": []}
+                
+#             # Extract the parent interview IDs/Names
+#             allowed_interview_names = [d.parent for d in assigned_interviews]
+#             interview_filters["name"] = ["in", allowed_interview_names]
+#         # --- NEW FILTERING LOGIC END ---
+
+#         interviews = frappe.get_all(
+#             "Interview", 
+#             filters=interview_filters, # Apply the filters here
+#             fields=["name"], 
+#             order_by="creation desc"
+#         )
+        
+#         result = []
+#         for interview_name in interviews:
+#             try:
+#                 doc = frappe.get_doc("Interview", interview_name.name)
+#                 interview_data = {
+#                     "name": doc.name,
+#                     "job_applicant": doc.get("job_applicant"),
+#                     "interview_round": doc.get("interview_round"),
+#                     "scheduled_on": doc.get("scheduled_on"),
+#                     "status": doc.get("status"),
+#                     "interviewer": None
+#                 }
+                
+#                 # Get first interviewer
+#                 try:
+#                     interviewer_details = frappe.db.get_all(
+#                         "Interview Detail",
+#                         filters={"parent": doc.name},
+#                         fields=["interviewer"],
+#                         limit=1
+#                     )
+                    
+#                     if interviewer_details and len(interviewer_details) > 0:
+#                         interview_data["interviewer"] = interviewer_details[0].get("interviewer")
+#                 except:
+#                     pass
+                
+#                 # Get applicant name
+#                 if interview_data.get("job_applicant"):
+#                     try:
+#                         applicant = frappe.get_doc("Job Applicant", interview_data["job_applicant"])
+#                         interview_data["applicant_name"] = applicant.applicant_name
+#                     except:
+#                         pass
+                
+#                 result.append(interview_data)
+#             except:
+#                 continue
+        
+#         return {"message": "Success", "data": result}
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), "Get Interviews Failed")
+#         return {"message": f"Error: {str(e)}", "data": []}
+
+
+
 @frappe.whitelist(allow_guest=True)
 def get_interviews():
-    """Get list of interviews with interviewer details"""
     try:
-        # --- NEW FILTERING LOGIC START ---
         user = frappe.session.user
         
-        # Check if the user has administrative privileges
         is_admin = frappe.db.exists("Has Role", {
             "parent": user, 
             "role": ["in", ["HR Manager", "System Manager"]]
         })
 
-        # Build base filters for the parent Interview doc
         interview_filters = {}
         
-        # If not an admin, restrict to only interviews assigned to this user
         if not is_admin and user != "Guest":
             assigned_interviews = frappe.get_all(
                 "Interview Detail",
                 filters={"interviewer": user},
                 fields=["parent"]
             )
-            
-            # If they have no assigned interviews, return empty data immediately
             if not assigned_interviews:
                 return {"message": "Success", "data": []}
-                
-            # Extract the parent interview IDs/Names
             allowed_interview_names = [d.parent for d in assigned_interviews]
             interview_filters["name"] = ["in", allowed_interview_names]
-        # --- NEW FILTERING LOGIC END ---
 
         interviews = frappe.get_all(
             "Interview", 
-            filters=interview_filters, # Apply the filters here
+            filters=interview_filters,
             fields=["name"], 
             order_by="creation desc"
         )
+
+        # ✅ NEW: Get all interviews that already have feedback submitted
+        interviews_with_feedback = frappe.get_all(
+            "Interview Feedback",
+            fields=["interview"],
+            filters={"docstatus": ["!=", 2]}  # exclude cancelled
+        )
+        excluded_interviews = {f.interview for f in interviews_with_feedback}
         
         result = []
         for interview_name in interviews:
+            # ✅ NEW: Skip interviews that already have feedback
+            if interview_name.name in excluded_interviews:
+                continue
+
             try:
                 doc = frappe.get_doc("Interview", interview_name.name)
                 interview_data = {
@@ -491,7 +579,6 @@ def get_interviews():
                     "interviewer": None
                 }
                 
-                # Get first interviewer
                 try:
                     interviewer_details = frappe.db.get_all(
                         "Interview Detail",
@@ -499,13 +586,11 @@ def get_interviews():
                         fields=["interviewer"],
                         limit=1
                     )
-                    
-                    if interviewer_details and len(interviewer_details) > 0:
+                    if interviewer_details:
                         interview_data["interviewer"] = interviewer_details[0].get("interviewer")
                 except:
                     pass
                 
-                # Get applicant name
                 if interview_data.get("job_applicant"):
                     try:
                         applicant = frappe.get_doc("Job Applicant", interview_data["job_applicant"])
@@ -521,10 +606,6 @@ def get_interviews():
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Get Interviews Failed")
         return {"message": f"Error: {str(e)}", "data": []}
-
-
-
-
 
 
 
