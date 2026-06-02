@@ -115,6 +115,24 @@ def upload_and_process(job_opening=None):
                 )
                 continue
 
+            # Skip expensive parsing if the exact same file content was already attached to an applicant.
+            try:
+                content_hash = saved_file.get("content_hash")
+                if content_hash and frappe.db.exists(
+                    "File",
+                    {
+                        "content_hash": content_hash,
+                        "attached_to_doctype": "Job Applicant",
+                    },
+                ):
+                    frappe.logger().info(
+                        f"Skipping AI parse for duplicate file content: {filename_orig}"
+                    )
+                    continue
+            except Exception:
+                # Best-effort optimization; continue normal flow on any lookup issue.
+                pass
+
             ext = os.path.splitext(file_path)[1].lower()
 
             args = (

@@ -546,6 +546,7 @@ import mimetypes
 import shutil
 import subprocess
 import time
+import threading
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pdfminer.high_level import extract_text
@@ -560,11 +561,24 @@ from datetime import datetime
 
 # Max concurrent Gemini API calls - keep low to avoid rate limits (429)
 PARALLEL_WORKERS = 2
-GEMINI_RETRY_ATTEMPTS = 4
+GEMINI_RETRY_ATTEMPTS = 2
 GEMINI_RETRY_BASE_DELAY = 3  # seconds
+_GEMINI_RETRY_COUNT = 0
+_GEMINI_RETRY_LOCK = threading.Lock()
 
 class PDFUpload(Document):
     pass
+
+
+def reset_gemini_retry_counter():
+    global _GEMINI_RETRY_COUNT
+    with _GEMINI_RETRY_LOCK:
+        _GEMINI_RETRY_COUNT = 0
+
+
+def get_gemini_retry_counter():
+    with _GEMINI_RETRY_LOCK:
+        return _GEMINI_RETRY_COUNT
 
 
 def normalize_attach_file_url(file_url):
@@ -688,7 +702,7 @@ def parse_with_gemini(text, job_title=None, job_description=None):
         prompt = prompt.replace("{{JOB_TITLE}}", job_title or "N/A")
         prompt = prompt.replace("{{JOB_DESCRIPTION}}", job_description or "N/A")
 
-        model_names = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]  # flash first for speed
+        model_names = ["gemini-2.5-flash"]  # keep single low-cost model
         last_error = None
         skipped_models = []
         
@@ -715,11 +729,7 @@ def parse_with_gemini(text, job_title=None, job_description=None):
         if result: return result
         
         # Dynamic fallback
-        models = genai.list_models()
-        dynamic_models = [m.name.replace('models/', '') for m in models 
-                          if 'generateContent' in m.supported_generation_methods 
-                          and m.name.replace('models/', '') not in model_names]
-        return try_models(dynamic_models) or (lambda: exec('raise last_error'))()
+        raise last_error or Exception("Gemini parsing failed")
     except Exception as e:
         frappe.logger().error(f"Gemini parsing failed: {e}")
         raise
@@ -828,7 +838,7 @@ def parse_with_gemini_file(file_path, job_title=None, job_description=None):
     with open(file_path, "rb") as f:
         pdf_bytes = f.read()
 
-    model_names = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]  # flash first for speed
+    model_names = ["gemini-2.5-flash"]  # keep single low-cost model
     last_error = None
     for model_name in model_names:
         try:
@@ -865,6 +875,9 @@ def _call_gemini_with_retry(call_fn):
         except Exception as e:
             last_error = e
             if attempt < GEMINI_RETRY_ATTEMPTS - 1 and _is_retryable_error(e):
+                global _GEMINI_RETRY_COUNT
+                with _GEMINI_RETRY_LOCK:
+                    _GEMINI_RETRY_COUNT += 1
                 delay = GEMINI_RETRY_BASE_DELAY * (2 ** attempt)
                 time.sleep(delay)
             else:
@@ -1008,11 +1021,17 @@ def process_files_background(docname):
         # 1. Resolve file paths (fast, sequential)
         t_path_start = time.perf_counter()
         tasks = []
+        skipped_existing_attachment = 0
         for file_entry in doc.get("files"):
             file_url = file_entry.get("file_upload")
             if not file_url:
                 continue
             file_url = normalize_attach_file_url(file_url)
+
+            # Skip expensive parsing if this exact file was already imported.
+            if frappe.db.exists("Job Applicant", {"resume_attachment": file_url}):
+                skipped_existing_attachment += 1
+                continue
 
             file_path = None
             file_list = frappe.get_all("File", filters={"file_url": file_url}, limit=1)
@@ -1044,6 +1063,7 @@ def process_files_background(docname):
         frappe.logger().info(f"PDF Upload {docname}: Path resolution {t_path_elapsed:.2f}s for {len(tasks)} file(s)")
 
         # 2. Parse files (2 at a time to avoid rate limits; retries on 429)
+        reset_gemini_retry_counter()
         t_parse_start = time.perf_counter()
         workers = min(PARALLEL_WORKERS, len(tasks))
         results = []
@@ -1063,7 +1083,12 @@ def process_files_background(docname):
                     results.append((file_url, applicant_data))
 
         t_parse_elapsed = time.perf_counter() - t_parse_start
+        gemini_retries = get_gemini_retry_counter()
         frappe.logger().info(f"PDF Upload {docname}: AI parsing {t_parse_elapsed:.2f}s ({len(results)}/{len(tasks)} parsed)")
+        frappe.logger().info(
+            f"PDF Upload {docname}: Parse audit parsed={len(results)} "
+            f"skipped_existing_attachment={skipped_existing_attachment} gemini_retries={gemini_retries}"
+        )
 
         # 3. Create Job Applicants (fast, sequential - DB writes)
         t_db_start = time.perf_counter()
@@ -1129,8 +1154,10 @@ def process_files_background(docname):
         summary_parts = [
             _("Resume import finished in {0:.1f}s.").format(t_total),
             _("Created: {0}").format(len(created_names)),
+            _("Skipped (already imported attachment): {0}").format(skipped_existing_attachment),
             _("Skipped (duplicate email): {0}").format(skipped_duplicate),
             _("Skipped (missing name/email from AI): {0}").format(skipped_missing),
+            _("Gemini retries: {0}").format(gemini_retries),
             _("Parse errors: {0}").format(len(parse_errors)),
             _("Insert errors: {0}").format(len(insert_failed)),
         ]
