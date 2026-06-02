@@ -881,7 +881,8 @@ def _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc):
     prompt = prompt.replace("{{JOB_TITLE}}", job_title or "N/A")
     prompt = prompt.replace("{{JOB_DESCRIPTION}}", job_desc or "N/A")
     last_error = None
-    for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]:
+    # for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]:
+    for model_name in ["gemini-2.5-flash"]:
         try:
             def _call(m=model_name, p=prompt):
                 model = genai.GenerativeModel(m)
@@ -908,7 +909,8 @@ def _parse_pdf_threadsafe(api_key, prompt_template, file_path, job_title, job_de
     with open(file_path, "rb") as f:
         pdf_bytes = f.read()
     last_error = None
-    for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]:
+    # for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]:
+    for model_name in ["gemini-2.5-flash"]:
         try:
             def _call(m=model_name, p=prompt, b=pdf_bytes):
                 model = genai.GenerativeModel(m)
