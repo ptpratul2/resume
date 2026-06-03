@@ -1227,3 +1227,4 @@ def process_resume_pipeline(file_path, job_title=None, job_desc=None):
     except Exception as e:
         frappe.logger().error(f"Gemini parse failed: {e}")
         return None
+

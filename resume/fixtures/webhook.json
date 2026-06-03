@@ -88,5 +88,31 @@
   ],
   "webhook_json": "{\r\n  \"job_applicant\": \"{{ doc.job_applicant or '' }}\",\r\n  \"applicant_name\": \"{{ doc.applicant_name or '' }}\",\r\n  \"applicant_email\": \"{{ doc.applicant_email or '' }}\",\r\n  \"designation\": \"{{ doc.designation or '' }}\",\r\n  \"company\": \"{{ doc.company or '' }}\",\r\n  \"status\": \"{{ doc.status or '' }}\",\r\n  \"offer_date\": \"{{ doc.offer_date or '' }}\",\r\n\r\n  \"custom_offer_letter_pdf\": \"https://ats.vaaman.in/files/{{ doc.name }}.pdf\"\r\n}",
   "webhook_secret": null
+ },
+ {
+  "background_jobs_queue": null,
+  "condition": "doc.status==\"Pending\"",
+  "docstatus": 0,
+  "doctype": "Webhook",
+  "enable_security": 0,
+  "enabled": 1,
+  "is_dynamic_url": 0,
+  "modified": "2026-06-02 11:42:02.810521",
+  "name": "Zoho Test",
+  "request_method": "POST",
+  "request_structure": "JSON",
+  "request_url": "https://n8n.octavision.in/webhook/interview_dynamic",
+  "timeout": 5,
+  "webhook_data": [],
+  "webhook_docevent": "after_insert",
+  "webhook_doctype": "Interview",
+  "webhook_headers": [
+   {
+    "key": "Content-Type",
+    "value": "application/json"
+   }
+  ],
+  "webhook_json": "{\r\n  \"interview_id\": \"{{ doc.name }}\",\r\n  \"job_applicant\": \"{{ doc.job_applicant }}\",\r\n  \"scheduled_on\": \"{{ doc.scheduled_on }}\",\r\n  \"from_time\": \"{{ doc.from_time }}\",\r\n  \"to_time\": \"{{ doc.to_time }}\",\r\n  \"interview_round\": \"{{ doc.interview_round }}\",\r\n  \"custom_location\": \"{{ doc.custom_location }}\",\r\n  \"status\": \"{{ doc.status }}\",\r\n  \"scheduled_by\":\"{{ frappe.session.user }}\",\r\n  \"interviewers\": {{ doc.interview_details | tojson }}\r\n}",
+  "webhook_secret": null
  }
 ]
