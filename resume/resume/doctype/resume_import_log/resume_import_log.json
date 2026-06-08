@@ -1,0 +1,93 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-03 13:54:05.812689",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "job_title",
+  "total_files",
+  "parsed_count",
+  "created_count",
+  "parse_error_count",
+  "status",
+  "processed_at",
+  "section_break_buor",
+  "file_results"
+ ],
+ "fields": [
+  {
+   "fieldname": "job_title",
+   "fieldtype": "Link",
+   "label": "Job Opening Name",
+   "options": "Job Opening"
+  },
+  {
+   "fieldname": "total_files",
+   "fieldtype": "Int",
+   "label": "Total Files"
+  },
+  {
+   "fieldname": "parsed_count",
+   "fieldtype": "Int",
+   "label": "Parsed Successfully"
+  },
+  {
+   "fieldname": "created_count",
+   "fieldtype": "Int",
+   "label": "Job Applicants Created"
+  },
+  {
+   "fieldname": "parse_error_count",
+   "fieldtype": "Int",
+   "label": "Parse Errors"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status"
+  },
+  {
+   "fieldname": "processed_at",
+   "fieldtype": "Datetime",
+   "label": "Processed At"
+  },
+  {
+   "fieldname": "section_break_buor",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "file_results",
+   "fieldtype": "Table",
+   "label": "File Results",
+   "options": "Resume Import Log Entry"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-03 13:57:26.841951",
+ "modified_by": "Administrator",
+ "module": "Resume",
+ "name": "Resume Import Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

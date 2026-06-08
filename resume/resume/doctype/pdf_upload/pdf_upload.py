@@ -557,6 +557,7 @@ from pdf2image import convert_from_path
 from PIL import Image
 import docx  # For .docx files
 import google.generativeai as genai
+from resume.api.parse_guards import applicant_exists_for_job, should_skip_file_for_job
 from datetime import datetime
 
 # Max concurrent Gemini API calls - keep low to avoid rate limits (429)
@@ -959,9 +960,29 @@ def _extract_text(file_path, ext):
             return f.read()
     return None
 
+# def _extract_and_parse_file(args):
+#     """Runs in thread. Uses pre-loaded api_key + prompt_template. No frappe calls."""
+#     file_path, file_url, job_title, job_desc, ext, api_key, prompt_template = args
+#     try:
+#         if ext == ".pdf":
+#             text = _extract_text(file_path, ext)
+#             if text:
+#                 applicant_data = _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc)
+#             else:
+#                 applicant_data = _parse_pdf_threadsafe(api_key, prompt_template, file_path, job_title, job_desc)
+#         else:
+#             text = _extract_text(file_path, ext)
+#             if not text:
+#                 return (file_url, None, f"Could not extract text from {file_url}")
+#             applicant_data = _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc)
+#         return (file_url, applicant_data, None)
+#     except Exception as e:
+#         return (file_url, None, str(e))
+
 def _extract_and_parse_file(args):
     """Runs in thread. Uses pre-loaded api_key + prompt_template. No frappe calls."""
     file_path, file_url, job_title, job_desc, ext, api_key, prompt_template = args
+    file_name = os.path.basename(file_path)
     try:
         if ext == ".pdf":
             text = _extract_text(file_path, ext)
@@ -972,11 +993,11 @@ def _extract_and_parse_file(args):
         else:
             text = _extract_text(file_path, ext)
             if not text:
-                return (file_url, None, f"Could not extract text from {file_url}")
+                return (file_url, file_name, None, f"Could not extract text from {file_url}")
             applicant_data = _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc)
-        return (file_url, applicant_data, None)
+        return (file_url, file_name, applicant_data, None)
     except Exception as e:
-        return (file_url, None, str(e))
+        return (file_url, file_name, None, str(e))
 
 
 def process_files_background(docname):
@@ -1028,12 +1049,8 @@ def process_files_background(docname):
                 continue
             file_url = normalize_attach_file_url(file_url)
 
-            # Skip expensive parsing if this exact file was already imported.
-            if frappe.db.exists("Job Applicant", {"resume_attachment": file_url}):
-                skipped_existing_attachment += 1
-                continue
-
             file_path = None
+            file_doc = None
             file_list = frappe.get_all("File", filters={"file_url": file_url}, limit=1)
             if file_list:
                 try:
@@ -1041,6 +1058,12 @@ def process_files_background(docname):
                     file_path = file_doc.get_full_path()
                 except Exception:
                     pass
+
+            content_hash = file_doc.content_hash if file_doc else None
+            if should_skip_file_for_job(file_url, content_hash, job_title):
+                skipped_existing_attachment += 1
+                continue
+
             if not file_path or not os.path.exists(file_path):
                 path_parts = file_url.lstrip("/").split("/") if file_url.startswith("/private") else ["public"] + file_url.lstrip("/").split("/")
                 file_path = os.path.abspath(frappe.get_site_path(*path_parts))
@@ -1075,7 +1098,7 @@ def process_files_background(docname):
                     time.sleep(2)  # Stagger starts to reduce rate limit spikes
                 futures[executor.submit(_extract_and_parse_file, t)] = t
             for future in as_completed(futures):
-                file_url, applicant_data, error_msg = future.result()
+                file_url, file_name, applicant_data, error_msg = future.result()
                 if error_msg:
                     frappe.logger().error(f"Parsing failed for {file_url}: {error_msg}")
                     parse_errors.append(f"{file_url}: {error_msg}")
@@ -1102,14 +1125,14 @@ def process_files_background(docname):
         insert_failed = []
 
         for file_url, applicant_data in results:
-            email = applicant_data.get("email_id")
+            email = (applicant_data.get("email_id") or applicant_data.get("email") or "").strip().lower()
             if not email or not applicant_data.get("applicant_name"):
                 frappe.logger().warning(f"Missing Name/Email in AI response for {file_url}")
                 skipped_missing += 1
                 continue
 
-            if frappe.db.exists("Job Applicant", {"email_id": email}):
-                frappe.logger().info(f"Skipping: Applicant {email} already exists.")
+            if doc.job_title and applicant_exists_for_job(email, doc.job_title):
+                frappe.logger().info(f"Skipping: Applicant {email} already exists for job {doc.job_title}.")
                 skipped_duplicate += 1
                 continue
 
@@ -1155,7 +1178,7 @@ def process_files_background(docname):
             _("Resume import finished in {0:.1f}s.").format(t_total),
             _("Created: {0}").format(len(created_names)),
             _("Skipped (already imported attachment): {0}").format(skipped_existing_attachment),
-            _("Skipped (duplicate email): {0}").format(skipped_duplicate),
+            _("Skipped (duplicate email for this job): {0}").format(skipped_duplicate),
             _("Skipped (missing name/email from AI): {0}").format(skipped_missing),
             _("Gemini retries: {0}").format(gemini_retries),
             _("Parse errors: {0}").format(len(parse_errors)),
@@ -1227,4 +1250,3 @@ def process_resume_pipeline(file_path, job_title=None, job_desc=None):
     except Exception as e:
         frappe.logger().error(f"Gemini parse failed: {e}")
         return None
-

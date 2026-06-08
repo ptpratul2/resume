@@ -5,7 +5,17 @@ import frappe
 from frappe import _
 from frappe.utils.password import get_decrypted_password
 
+from resume.api.parse_guards import (
+    applicant_exists_for_job,
+    should_skip_file_for_job,
+)
 from resume.resume.doctype.pdf_upload.pdf_upload import _extract_and_parse_file
+
+try:
+    from vaaman_ats_ai.api.resume.resume import create_resume_from_upload
+except ImportError:
+    def create_resume_from_upload(applicant_data, file_url, job_opening=None, applicant_doc=None):
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -55,10 +65,6 @@ def flatten_resume_data(applicant_data):
         "degree":           degree,
         "institution":      institution,
     }
-
-
-def create_resume_from_upload(applicant_data, file_url, job_opening=None, applicant_doc=None):
-    pass
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +151,21 @@ def upload_and_process(job_opening=None):
             log_entries.append({"file_name": filename_orig, "applicant_name": "", "email_id": "", "status": "Failed", "error_message": f"Could not save file: {str(e)[:400]}", "job_applicant": ""})
             continue
 
+        if job_opening and should_skip_file_for_job(
+            file_url, saved_file.content_hash, job_opening
+        ):
+            log_entries.append({
+                "file_name":      filename_orig,
+                "applicant_name": "",
+                "email_id":       "",
+                "status":         "Skipped",
+                "error_message":  "File already imported for this job opening",
+                "full_error":     "",
+                "parsed_json":    "",
+                "job_applicant":  "",
+            })
+            continue
+
         # Parse
         ext  = os.path.splitext(file_path)[1].lower()
         args = (file_path, file_url, job_title_for_ai, job_desc_for_ai, ext, api_key, prompt_template)
@@ -200,13 +221,15 @@ def upload_and_process(job_opening=None):
             })
             continue
 
-        # Duplicate check
+        # Duplicate check (post-parse safety net for email + job)
         try:
-            exists_filters = {"email_id": email_value}
-            if job_opening:
-                exists_filters["job_title"] = job_opening
-            if frappe.db.exists("Job Applicant", exists_filters):
-                existing_name = frappe.db.get_value("Job Applicant", exists_filters, "name")
+            email_norm = (email_value or "").strip().lower()
+            if job_opening and applicant_exists_for_job(email_norm, job_opening):
+                existing_name = frappe.db.get_value(
+                    "Job Applicant",
+                    {"email_id": email_norm, "job_title": job_opening},
+                    "name",
+                )
                 log_entries.append({
                     "file_name":      filename_orig,
                     "applicant_name": applicant_name or "",
@@ -299,7 +322,7 @@ def upload_and_process(job_opening=None):
                 "applicant_name": applicant_name or "",
                 "email_id":       email_value or "",
                 "status":         "Failed",
-                "error_message":  readable_error,
+                "error_message":  str(e)[:500],
                 "full_error":     traceback.format_exc(),   # full Python traceback
                 "parsed_json":    json.dumps(applicant_data, indent=2) if applicant_data else "",
                 "job_applicant":  "",
