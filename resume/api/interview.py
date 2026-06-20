@@ -44,6 +44,7 @@ def create_interview_event():
             "doctype": "Interview",
             "interview_round": data.interview_round,
             "job_applicant": data.job_applicant,
+            "custom_interview_type": data.get("custom_interview_type") or None,  # ← ADD THIS
             "resume_link": data.get("resume_link"),
             "custom_meeting_link": data.get("meeting_link"),
             "custom_location": location,
@@ -85,6 +86,7 @@ def get_interview_list():
             fields=[
                 "name",
                 "interview_round",
+                "custom_interview_type",
                 "job_applicant",
                 "resume_link",
                 "custom_meeting_link",
@@ -192,6 +194,8 @@ def update_interview_event():
             interview_doc.resume_link = data.resume_link
         if data.get("meeting_link"):
             interview_doc.custom_meeting_link = data.meeting_link
+        if data.get("interview_type"):                                          # ← ADD THIS
+            interview_doc.custom_interview_type = data.interview_type      
         if data.get("location"):
             interview_doc.custom_location = data.location
         if data.get("status"):
@@ -373,4 +377,24 @@ def get_existing_interview_for_round(job_applicant, interview_round):
             "exists": False,
             "interview": None
         }
-        
+
+@frappe.whitelist(allow_guest=True)
+def get_interview_type_options():
+    """Get dynamic select options for custom_interview_type field"""
+    try:
+        meta = frappe.get_meta("Interview")
+        field = next(
+            (f for f in meta.fields if f.fieldname == "custom_interview_type"),
+            None
+        )
+        if not field or not field.options:
+            return {"message": "No options found", "data": []}
+
+        options = [opt.strip() for opt in field.options.split("\n") if opt.strip()]
+        return {
+            "message": "Interview type options fetched successfully",
+            "data": options
+        }
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Interview Type Options Fetch Failed")
+        frappe.throw("Failed to fetch interview type options")        

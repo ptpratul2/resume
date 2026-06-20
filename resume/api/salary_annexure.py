@@ -160,7 +160,8 @@ def get_salary_annexure_list():
                 "subtotal_a_monthly", "subtotal_a_annual",
                 "subtotal_b_monthly", "subtotal_b_annual",
                 "total_monthly", "total_annual",
-                "docstatus", "creation", "modified"
+                "docstatus", "creation", "modified",
+                "owner",
             ],
             order_by="creation desc"
         )

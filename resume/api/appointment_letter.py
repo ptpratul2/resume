@@ -223,6 +223,7 @@ def create_appointment_letter(data):
                 "custom_employee": data.get("custom_employee") or "",
                 "custom_salary_annexure": data.get("custom_salary_annexure") or "",
                 "custom_staffworker": custom_staffworker,  
+                "owner": appointment.owner or "",
             }
         }
     except Exception as e:
@@ -348,7 +349,7 @@ def get_appointment_letter_by_job_applicant(job_applicant):
         al_custom = frappe.db.get_value(
             "Appointment Letter",
             letter.name,
-            ["custom_employee", "custom_salary_annexure"],
+            ["custom_employee", "custom_salary_annexure", "owner"],
             as_dict=True
         ) or {}
 
@@ -376,6 +377,7 @@ def get_appointment_letter_by_job_applicant(job_applicant):
                 "custom_employee": custom_employee,
                 "custom_salary_annexure": al_custom.get("custom_salary_annexure") or "",
                 "custom_staffworker": custom_staffworker,  # ✅ from Employee doc
+                "owner": al_custom.get("owner") or letter.owner or "", 
             }
         }
     except Exception as e:

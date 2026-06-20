@@ -12,7 +12,7 @@ def get_candidate_feedback_list():
         feedback_list = frappe.db.sql("""
             SELECT 
                 name, interview, interviewer, result, 
-                feedback, creation, modified,
+                feedback, creation, modified,owner,
                 custom_candidate_name,
                 custom_interview_date,
                 custom_position_applied_for,
@@ -229,7 +229,8 @@ def get_candidate_feedback_list():
                 "final_score_recommendation": final_score_recommendation,
                 "not_shortlisted_reason": not_shortlisted_reason,
                 "withdrawn_reason": withdrawn_reason,
-                "remarks": feedback.get("custom_description") or ""
+                "remarks": feedback.get("custom_description") or "",
+                "owner": feedback.get("owner") or ""
             })
         
         return {
