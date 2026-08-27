@@ -38,8 +38,11 @@ def generate_document_link(applicant_name):
 
     link = f"{host_name}/document-verify/{token}"
 
+    sender = frappe.session.user
+
     frappe.sendmail(
         recipients=[doc.email_id],
+        sender=sender,
         subject="Upload Documents",
         message=f"""
             Hello {doc.applicant_name},<br><br>

@@ -170,7 +170,7 @@ def get_candidate_stage_statuses(candidate_id):
                 "notes": "No documents uploaded yet" if feedback_completed else "Complete previous stages first"
             })
         
-        # Stage 4: Offer Letter
+                # Stage 4: Offer Letter
         offers = frappe.get_all(
             "Job Offer",
             filters={"job_applicant": candidate_id},
@@ -181,9 +181,18 @@ def get_candidate_stage_statuses(candidate_id):
         
         if offers:
             offer = offers[0]
+            offer_status_raw = (offer.status or "").lower()
+            
+            if "accept" in offer_status_raw:
+                offer_stage_status = "completed"
+            elif "reject" in offer_status_raw:
+                offer_stage_status = "rejected"
+            else:
+                offer_stage_status = "in_progress"  # e.g. Awaiting Response / Draft
+            
             statuses.append({
                 "stage_id": "offer_letter",
-                "status": "completed",
+                "status": offer_stage_status,
                 "completed_date": offer.offer_date or offer.creation,
                 "notes": f"Offer status: {offer.status}"
             })
@@ -199,7 +208,7 @@ def get_candidate_stage_statuses(candidate_id):
         joining_records = frappe.get_all(
             "Joining Confirmation",
             filters={"candidate_id": candidate_id},
-            fields=["name", "join", "not_join", "offer_revoked", "modified"],
+            fields=["name", "join", "not_join", "offer_revoked", "modified", "custom_date_of_joining"],
             order_by="modified desc",
             limit=1
         )
@@ -212,6 +221,7 @@ def get_candidate_stage_statuses(candidate_id):
                     "stage_id": "joining_confirmation",
                     "status": "completed",
                     "completed_date": joining.modified,
+                    "date_of_joining": joining.get("custom_date_of_joining"),
                     "notes": "Candidate confirmed joining"
                 })
             elif joining.get("not_join") == 1:
@@ -219,6 +229,7 @@ def get_candidate_stage_statuses(candidate_id):
                     "stage_id": "joining_confirmation",
                     "status": "pending",
                     "completed_date": joining.modified,
+                    "date_of_joining": joining.get("custom_date_of_joining"),
                     "notes": "Candidate declined offer"
                 })
             elif joining.get("offer_revoked") == 1:
@@ -226,12 +237,14 @@ def get_candidate_stage_statuses(candidate_id):
                     "stage_id": "joining_confirmation",
                     "status": "rejected",
                     "completed_date": joining.modified,
+                    "date_of_joining": joining.get("custom_date_of_joining"),
                     "notes": "Offer revoked by company"
                 })
             else:
                 statuses.append({
                     "stage_id": "joining_confirmation",
                     "status": "in_progress",
+                    "date_of_joining": joining.get("custom_date_of_joining"),
                     "notes": "Awaiting joining confirmation"
                 })
         else:
@@ -597,6 +610,91 @@ def get_recruitment_pipeline():
         frappe.throw(f"Failed to fetch recruitment pipeline: {str(e)}")
         
 
+# @frappe.whitelist()
+# def update_joining_confirmation():
+#     """
+#     Update joining confirmation status for a candidate
+#     status_type: 'join', 'not_join', or 'offer_revoked'
+#     """
+#     try:
+#         # Try to get JSON data first
+#         data = frappe.local.form_dict
+        
+#         candidate_id = data.get('candidate_id')
+#         status_type = data.get('status_type')
+        
+#         frappe.logger().info(f"=== UPDATE JOINING CONFIRMATION ===")
+#         frappe.logger().info(f"Candidate ID: {candidate_id}")
+#         frappe.logger().info(f"Status Type: {status_type}")
+#         frappe.logger().info(f"Full form dict: {frappe.local.form_dict}")
+        
+#         if not candidate_id:
+#             return {
+#                 "success": False,
+#                 "message": "Candidate ID is required"
+#             }
+        
+#         if status_type not in ['join', 'not_join', 'offer_revoked']:
+#             return {
+#                 "success": False,
+#                 "message": "Invalid status type. Must be: join, not_join, or offer_revoked"
+#             }
+        
+#         # Check if a Joining Confirmation record already exists
+#         existing_records = frappe.get_all(
+#             "Joining Confirmation",
+#             filters={"candidate_id": candidate_id},
+#             fields=["name"]
+#         )
+        
+#         if existing_records:
+#             # Update existing record
+#             frappe.logger().info(f"Updating existing record: {existing_records[0].name}")
+#             doc = frappe.get_doc("Joining Confirmation", existing_records[0].name)
+#         else:
+#             # Create new record
+#             frappe.logger().info("Creating new record")
+#             doc = frappe.new_doc("Joining Confirmation")
+#             doc.candidate_id = candidate_id
+        
+#         # Reset all statuses
+#         doc.join = 0
+#         doc.not_join = 0
+#         doc.offer_revoked = 0
+        
+#         # Set the selected status
+#         setattr(doc, status_type, 1)
+#         frappe.logger().info(f"Setting {status_type} = 1")
+        
+#         # Save the document
+#         doc.save(ignore_permissions=True)
+#         frappe.db.commit()
+        
+#         frappe.logger().info("=== SUCCESS ===")
+        
+#         return {
+#             "success": True,
+#             "message": f"Joining confirmation updated: {status_type.replace('_', ' ').title()}",
+#             "data": {
+#                 "candidate_id": candidate_id,
+#                 "status": status_type
+#             }
+#         }
+        
+#     except Exception as e:
+#         frappe.logger().error(f"=== ERROR ===")
+#         frappe.logger().error(f"Error: {str(e)}")
+#         frappe.logger().error(f"Traceback: {frappe.get_traceback()}")
+        
+#         frappe.log_error(f"Error updating joining confirmation: {str(e)}")
+#         frappe.db.rollback()
+        
+#         return {
+#             "success": False,
+#             "message": f"Failed to update joining confirmation: {str(e)}"
+#         }
+
+
 @frappe.whitelist()
 def update_joining_confirmation():
     """
@@ -653,6 +751,11 @@ def update_joining_confirmation():
         setattr(doc, status_type, 1)
         frappe.logger().info(f"Setting {status_type} = 1")
         
+        # Clear date of joining if candidate is not joining or offer revoked
+        if status_type in ['not_join', 'offer_revoked']:
+            doc.custom_date_of_joining = None
+            frappe.logger().info(f"Clearing custom_date_of_joining because status_type = {status_type}")
+        
         # Save the document
         doc.save(ignore_permissions=True)
         frappe.db.commit()
@@ -697,3 +800,37 @@ def update_candidate_field():
     except Exception as e:
         frappe.log_error(str(e))
         return {"success": False, "message": str(e)}
+
+
+@frappe.whitelist()
+def update_joining_date():
+    """Update custom_date_of_joining field on Joining Confirmation record for a candidate"""
+    try:
+        data = frappe.local.form_dict
+        candidate_id = data.get('candidate_id')
+        date_of_joining = data.get('date_of_joining')
+
+        if not candidate_id:
+            return {"success": False, "message": "Candidate ID is required"}
+
+        existing_records = frappe.get_all(
+            "Joining Confirmation",
+            filters={"candidate_id": candidate_id},
+            fields=["name"]
+        )
+
+        if existing_records:
+            doc = frappe.get_doc("Joining Confirmation", existing_records[0].name)
+        else:
+            doc = frappe.new_doc("Joining Confirmation")
+            doc.candidate_id = candidate_id
+
+        doc.custom_date_of_joining = date_of_joining
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+
+        return {"success": True, "message": "Date of joining updated successfully", "data": {"date_of_joining": date_of_joining}}
+    except Exception as e:
+        frappe.log_error(str(e))
+        frappe.db.rollback()
+        return {"success": False, "message": str(e)}    

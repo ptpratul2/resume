@@ -283,20 +283,20 @@ fixtures = [
     {
         "doctype": "Server Script",
         "filters": [
-            ["reference_doctype", "in", ["Interview", "Salary Annexure","Interview Feedback","Job Applicant","Job Offer",]]
+            ["reference_doctype", "in", ["Interview", "Salary Annexure","Interview Feedback","Job Applicant","Job Offer","Joining Confirmation"]]
         ]
     },  # ✅ FIXED (comma added)
 
     {
         "doctype": "Print Format",
         "filters": [
-            ["doc_type", "in", ["Appointment Letter","Salary Annexure","Job Offer"]]
+            ["doc_type", "in", ["Appointment Letter","Salary Annexure","Job Offer",]]
         ]
     },
     {
         "doctype": "DocType",
         "filters": [
-            ["name", "in", ["Application Declaration","Application Form","Application Form","Applicant OTP","Joining","Joining Confirmation"]]
+            ["name", "in", ["Application Declaration","Application Form","Application Form","Applicant OTP","Joining","Joining Confirmation","Salary Annexure"]]
         ]
     },
 

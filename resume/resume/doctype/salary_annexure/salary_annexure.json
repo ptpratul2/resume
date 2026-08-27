@@ -6,6 +6,7 @@
  "engine": "InnoDB",
  "field_order": [
   "section_break_h54i",
+  "employee",
   "employee_name",
   "salary_components",
   "subtotal_a_monthly",
@@ -81,13 +82,22 @@
    "print_hide": 1,
    "read_only": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Employee",
+   "no_copy": 1,
+   "options": "Employee",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-05-01 16:52:46.824690",
+ "modified": "2026-08-24 15:37:57.972989",
  "modified_by": "Administrator",
  "module": "Resume",
  "name": "Salary Annexure",

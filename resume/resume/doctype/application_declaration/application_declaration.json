@@ -1,7 +1,8 @@
 {
  "actions": [],
  "allow_rename": 1,
- "creation": "2026-04-24 13:02:38.343313",
+ "autoname": "field:name1",
+ "creation": "2026-06-05 14:15:56.726544",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -20,7 +21,8 @@
   {
    "fieldname": "name1",
    "fieldtype": "Data",
-   "label": "Name"
+   "label": "Name",
+   "unique": 1
   },
   {
    "fieldname": "date",
@@ -41,10 +43,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-04-27 12:22:03.893118",
+ "modified": "2026-07-14 10:39:26.084043",
  "modified_by": "Administrator",
  "module": "Resume",
  "name": "Application Declaration",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {

@@ -1,7 +1,7 @@
 import frappe
 from datetime import datetime
 import json
-
+from frappe.model.workflow import apply_workflow, get_transitions, get_workflow_name, get_workflow_state_field
 
 @frappe.whitelist(allow_guest=True)
 def create_job_offer(data):
@@ -74,6 +74,18 @@ def create_job_offer(data):
             "custom_contact_name": data.get("custom_contact_name", ""),
             "custom_joining_date": data.get("custom_joining_date", ""),
             "custom_salary_annexure": data.get("custom_salary_annexure", ""),
+            "custom_location_list": data.get("custom_location_list", ""),
+            "custom_current_company": data.get("custom_current_company", ""),
+            "custom_qualification": data.get("custom_qualification", ""),
+            "custom_total_experience": data.get("custom_total_experience", ""),
+            "custom_our_budget_in_ctc_only": data.get("custom_our_budget_in_ctc_only") or 0,
+            "custom_current_ctc_of_candidate": data.get("custom_current_ctc_of_candidate") or 0,
+            "custom_ctc_to_be_offered": data.get("custom_ctc_to_be_offered") or 0,
+            "custom_interviewed_by_vaaman": data.get("custom_interviewed_by_vaaman", ""),
+            "custom_interviewed_by_client": data.get("custom_interviewed_by_client", ""),
+            "custom_replacementnew_position": data.get("custom_replacementnew_position", ""),
+            "custom_source_of_hiring": data.get("custom_source_of_hiring", ""),
+            "custom_background_verification_done_details": data.get("custom_background_verification_done_details", ""),
         })
         
         # Add job offer terms if provided
@@ -122,8 +134,20 @@ def create_job_offer(data):
                 "custom_mobile_no": data.get("custom_mobile_no", ""),
                 "custom_contact_name": data.get("custom_contact_name", ""),
                 "custom_joining_date": data.get("custom_joining_date", ""),
-                "custom_salary_annexure": data.get("custom_salary_annexure", ""),       
-                "offer_terms": terms_list   
+                "custom_salary_annexure": data.get("custom_salary_annexure", ""),   
+                "custom_location_list": data.get("custom_location_list", ""),
+                "custom_current_company": data.get("custom_current_company", ""),
+                "custom_qualification": data.get("custom_qualification", ""),
+                "custom_total_experience": data.get("custom_total_experience", ""),
+                "custom_our_budget_in_ctc_only": data.get("custom_our_budget_in_ctc_only") or 0,
+                "custom_current_ctc_of_candidate": data.get("custom_current_ctc_of_candidate") or 0,
+                "custom_ctc_to_be_offered": data.get("custom_ctc_to_be_offered") or 0,
+                "custom_interviewed_by_vaaman": data.get("custom_interviewed_by_vaaman", ""),
+                "custom_interviewed_by_client": data.get("custom_interviewed_by_client", ""),
+                "custom_replacementnew_position": data.get("custom_replacementnew_position", ""),
+                "custom_source_of_hiring": data.get("custom_source_of_hiring", ""),
+                "custom_background_verification_done_details": data.get("custom_background_verification_done_details", ""),
+                "offer_terms": terms_list
             }
         }
         
@@ -157,6 +181,19 @@ def get_job_offer_list():
                 "custom_mobile_no",
                 "custom_contact_name",
                 "custom_joining_date",
+                "custom_location_list",
+                "custom_current_company",
+                "custom_qualification",
+                "custom_total_experience",
+                "custom_our_budget_in_ctc_only",
+                "custom_current_ctc_of_candidate",
+                "custom_ctc_to_be_offered",
+                "custom_interviewed_by_vaaman",
+                "custom_interviewed_by_client",
+                "custom_replacementnew_position",
+                "custom_source_of_hiring",
+                "custom_background_verification_done_details",
+                "workflow_state",
                 "creation",
                 "modified"
             ],
@@ -241,6 +278,30 @@ def update_job_offer():
             job_offer_doc.status = data.status
         if data.get("job_offer_template"):
             job_offer_doc.job_offer_term_template = data.job_offer_template
+        if data.get("custom_location_list"):
+            job_offer_doc.custom_location_list = data.custom_location_list
+        if data.get("custom_current_company"):
+            job_offer_doc.custom_current_company = data.custom_current_company
+        if data.get("custom_qualification"):
+            job_offer_doc.custom_qualification = data.custom_qualification
+        if data.get("custom_total_experience"):
+            job_offer_doc.custom_total_experience = data.custom_total_experience
+        if data.get("custom_our_budget_in_ctc_only"):
+            job_offer_doc.custom_our_budget_in_ctc_only = data.custom_our_budget_in_ctc_only
+        if data.get("custom_current_ctc_of_candidate"):
+            job_offer_doc.custom_current_ctc_of_candidate = data.custom_current_ctc_of_candidate
+        if data.get("custom_ctc_to_be_offered"):
+            job_offer_doc.custom_ctc_to_be_offered = data.custom_ctc_to_be_offered
+        if data.get("custom_interviewed_by_vaaman"):
+            job_offer_doc.custom_interviewed_by_vaaman = data.custom_interviewed_by_vaaman
+        if data.get("custom_interviewed_by_client"):
+            job_offer_doc.custom_interviewed_by_client = data.custom_interviewed_by_client
+        if data.get("custom_replacementnew_position"):
+            job_offer_doc.custom_replacementnew_position = data.custom_replacementnew_position
+        if data.get("custom_source_of_hiring"):
+            job_offer_doc.custom_source_of_hiring = data.custom_source_of_hiring
+        if data.get("custom_background_verification_done_details"):
+            job_offer_doc.custom_background_verification_done_details = data.custom_background_verification_done_details   
         
         # Update offer terms if provided
         if data.get("offer_terms"):
@@ -376,6 +437,28 @@ def get_companies():
 
 
 @frappe.whitelist(allow_guest=True)
+def get_locations():
+    """Get list of locations"""
+    try:
+        locations = frappe.get_all(
+            "Location",
+            filters={"is_group": 0},
+            fields=["name"],
+            order_by="name"
+        )
+        return {
+            "message": "Locations fetched successfully",
+            "data": locations
+        }
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Locations Fetch Failed")
+        return {
+            "message": "No locations found",
+            "data": []
+        }
+
+
+@frappe.whitelist(allow_guest=True)
 def get_designations():
     """Get list of designations"""
     try:
@@ -472,7 +555,10 @@ def get_job_applicant_details(job_applicant_name):
                 "applicant_name": applicant.applicant_name,
                 "email_id": applicant.email_id or "",
                 "designation": designation,
-                "company": company
+                "company": company,
+                "current_company": applicant.get("custom_current_company") or "",
+                "qualification": applicant.get("highest_qualification") or "",
+                "total_experience": applicant.get("custom_total_experience") or ""
             }
         }
         
@@ -605,4 +691,69 @@ def update_job_offer_status():
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Job Offer Status Update Failed")
         # Return instead of throw so we get 200 with error detail
-        return {"success": False, "message": str(e)}        
+        return {"success": False, "message": str(e)}       
+
+
+@frappe.whitelist(allow_guest=True)
+def get_offer_workflow_actions(job_offer_name):
+    """Get available workflow actions for the current user on this Job Offer"""
+    try:
+        if not job_offer_name:
+            frappe.throw("Job offer name is required")
+
+        doc = frappe.get_doc("Job Offer", job_offer_name)
+
+        # Dynamically resolve the workflow state field configured on the Workflow doctype
+        workflow_name = get_workflow_name(doc.doctype)
+        state_field = get_workflow_state_field(workflow_name) if workflow_name else None
+        current_state = doc.get(state_field) if state_field else None
+
+        transitions = get_transitions(doc)
+        actions = [t.get("action") for t in transitions]
+
+        return {
+            "message": "Workflow actions fetched",
+            "data": {
+                "workflow_name": workflow_name,
+                "workflow_state_field": state_field,
+                "workflow_state": current_state,
+                "status": doc.get("status"),
+                "actions": actions
+            }
+        }
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Get Workflow Actions Failed")
+        return {"message": "Error", "data": {"workflow_state": "", "actions": []}}
+
+@frappe.whitelist(allow_guest=True)
+def apply_offer_workflow_action():
+    """Apply a workflow action (Approve / Reject / Review) to a Job Offer"""
+    job_offer_name = frappe.form_dict.get("name") or frappe.local.form_dict.get("name")
+    action = frappe.form_dict.get("action") or frappe.local.form_dict.get("action")
+
+    if not job_offer_name:
+        return {"success": False, "message": "Job offer name is required"}
+    if not action:
+        return {"success": False, "message": "Action is required"}
+
+    try:
+        doc = frappe.get_doc("Job Offer", job_offer_name)
+        apply_workflow(doc, action)
+        frappe.db.commit()
+
+        # Dynamically resolve the workflow state field after the transition
+        workflow_name = get_workflow_name(doc.doctype)
+        state_field = get_workflow_state_field(workflow_name) if workflow_name else None
+        current_state = doc.get(state_field) if state_field else None
+
+        return {
+            "success": True,
+            "message": f"'{action}' applied successfully",
+            "workflow_state": current_state,
+            "status": doc.get("status")
+        }
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Apply Workflow Action Failed")
+        frappe.db.rollback()
+        return {"success": False, "message": str(e)}    
+    

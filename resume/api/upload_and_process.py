@@ -568,6 +568,10 @@ def upload_and_process(job_opening=None):
     for file_storage in files:
         filename_orig = getattr(file_storage, "filename", None) or "uploaded_file"
         total_files  += 1
+        frappe.log_error(
+             f"Processing {filename_orig}",
+             "Resume Upload Debug"
+             )
 
         # Save file
         try:
@@ -582,6 +586,10 @@ def upload_and_process(job_opening=None):
                 "content": file_content, "is_private": 1,
             })
             saved_file.insert(ignore_permissions=True)
+            frappe.log_error(
+    f"Saved {filename_orig}",
+    "Resume Upload Debug"
+)
             file_url  = saved_file.file_url
             file_path = saved_file.get_full_path()
         except Exception as e:
