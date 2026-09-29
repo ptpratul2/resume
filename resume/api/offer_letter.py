@@ -3,7 +3,7 @@ from datetime import datetime
 import json
 from frappe.model.workflow import apply_workflow, get_transitions, get_workflow_name, get_workflow_state_field
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Job Offer record create karta hai
 def create_job_offer(data):
     """Create a new job offer"""
     try:
@@ -22,6 +22,10 @@ def create_job_offer(data):
                     "success": False,
                     "message": f"{field} is required"
                 }
+
+        # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+        if not frappe.has_permission("Job Offer", ptype="create"):
+            return {"success": False, "message": "You do not have permission to create Job Offer"}
 
         # Validate status
         status = data.get("status")
@@ -111,7 +115,7 @@ def create_job_offer(data):
                         "value": term.get("value_description")
                     })
         
-        job_offer_doc.insert(ignore_permissions=True)
+        job_offer_doc.insert(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
         
         frappe.log(f"Created job offer: {job_offer_doc.name}, status: {job_offer_doc.status}")
@@ -248,7 +252,7 @@ def get_job_offer_details(job_offer_name):
         frappe.throw(f"Failed to fetch job offer details: {str(e)}")
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Job Offer record write/update karta hai
 def update_job_offer():
     """Update an existing job offer"""
     data = frappe.form_dict
@@ -257,6 +261,10 @@ def update_job_offer():
     job_offer_name = data.get("name")
     if not job_offer_name:
         frappe.throw("Job offer name is required for update")
+
+    # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+    if not frappe.has_permission("Job Offer", ptype="write", doc=job_offer_name):
+        frappe.throw("You do not have permission to update this Job Offer")
 
     try:
         job_offer_doc = frappe.get_doc("Job Offer", job_offer_name)
@@ -316,7 +324,7 @@ def update_job_offer():
                         "value": term.get("value_description")
                     })
         
-        job_offer_doc.save(ignore_permissions=True)
+        job_offer_doc.save(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
         
         frappe.log(f"Updated job offer: {job_offer_doc.name}")
@@ -330,14 +338,18 @@ def update_job_offer():
         frappe.throw(f"Failed to update job offer: {str(e)}")
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Job Offer record delete karta hai
 def delete_job_offer(job_offer_name):
     """Delete a job offer"""
     try:
         if not job_offer_name:
             frappe.throw("Job offer name is required")
+
+        # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+        if not frappe.has_permission("Job Offer", ptype="delete", doc=job_offer_name):
+            frappe.throw("You do not have permission to delete this Job Offer")
         
-        frappe.delete_doc("Job Offer", job_offer_name, ignore_permissions=True)
+        frappe.delete_doc("Job Offer", job_offer_name, ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
         
         return {
@@ -662,7 +674,7 @@ def get_job_offer_statuses():
         return {"message": "Error", "data": ["Awaiting Response", "Accepted", "Rejected"]}
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Job Offer record write/update karta hai
 def update_job_offer_status():
     """Update only the status of a job offer"""
     # Works for both GET (query params) and POST (form data)
@@ -681,6 +693,12 @@ def update_job_offer_status():
         if not frappe.db.exists("Job Offer", job_offer_name):
             return {"success": False, "message": f"Job Offer {job_offer_name} not found"}
 
+        # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+        # frappe.db.set_value neeche seedha DB write karta hai aur permission engine ko
+        # bypass kar deta hai, isliye yaha explicit check zaroori hai.
+        if not frappe.has_permission("Job Offer", ptype="write", doc=job_offer_name):
+            return {"success": False, "message": "You do not have permission to update this Job Offer"}
+
         frappe.db.set_value("Job Offer", job_offer_name, "status", new_status, update_modified=True)
         frappe.db.commit()
 
@@ -691,8 +709,73 @@ def update_job_offer_status():
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Job Offer Status Update Failed")
         # Return instead of throw so we get 200 with error detail
-        return {"success": False, "message": str(e)}       
+        return {"success": False, "message": str(e)}   
 
+
+@frappe.whitelist(methods=["POST"])
+def update_job_offer_joining_date():
+    """Update custom_joining_date of a Job Offer and sync it to Joining Confirmation"""
+    job_offer_name = frappe.form_dict.get("name")
+    joining_date = frappe.form_dict.get("joining_date")
+
+    if not job_offer_name:
+        return {"success": False, "message": "Job offer name is required"}
+    if not joining_date:
+        return {"success": False, "message": "Joining date is required"}
+
+    try:
+        from frappe.utils import getdate
+
+        if not frappe.db.exists("Job Offer", job_offer_name):
+            return {"success": False, "message": f"Job Offer {job_offer_name} not found"}
+
+        # Permission check (Role Permissions Manager ke hisaab se)
+        if not frappe.has_permission("Job Offer", ptype="write", doc=job_offer_name):
+            return {"success": False, "message": "You do not have permission to update this Job Offer"}
+
+        try:
+            parsed_date = getdate(joining_date)
+        except Exception:
+            return {"success": False, "message": "Invalid date format. Use YYYY-MM-DD"}
+
+        # 1) Job Offer update
+        frappe.db.set_value("Job Offer", job_offer_name, "custom_joining_date", parsed_date, update_modified=True)
+
+        # 2) NEW: Joining Confirmation sync (sirf jab candidate ne Join accept kiya ho)
+        synced = False
+        job_applicant = frappe.db.get_value("Job Offer", job_offer_name, "job_applicant")
+
+        if job_applicant:
+            joining_record = frappe.db.get_value(
+                "Joining Confirmation",
+                {"candidate_id": job_applicant},
+                ["name", "join"],
+                as_dict=True
+            )
+
+            if joining_record and joining_record.join == 1:
+                if frappe.has_permission("Joining Confirmation", ptype="write", doc=joining_record.name):
+                    frappe.db.set_value(
+                        "Joining Confirmation",
+                        joining_record.name,
+                        "custom_date_of_joining",
+                        parsed_date,
+                        update_modified=True
+                    )
+                    synced = True
+
+        frappe.db.commit()
+
+        return {
+            "success": True,
+            "message": "Joining date updated successfully" + (" (Joining Confirmation also updated)" if synced else ""),
+            "data": {"joining_date": str(parsed_date), "joining_confirmation_synced": synced}
+        }
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Job Offer Joining Date Update Failed")
+        frappe.db.rollback()
+        return {"success": False, "message": str(e)}
+    
 
 @frappe.whitelist(allow_guest=True)
 def get_offer_workflow_actions(job_offer_name):
@@ -725,7 +808,7 @@ def get_offer_workflow_actions(job_offer_name):
         frappe.log_error(frappe.get_traceback(), "Get Workflow Actions Failed")
         return {"message": "Error", "data": {"workflow_state": "", "actions": []}}
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Job Offer par workflow action (write) apply karta hai
 def apply_offer_workflow_action():
     """Apply a workflow action (Approve / Reject / Review) to a Job Offer"""
     job_offer_name = frappe.form_dict.get("name") or frappe.local.form_dict.get("name")
@@ -735,6 +818,10 @@ def apply_offer_workflow_action():
         return {"success": False, "message": "Job offer name is required"}
     if not action:
         return {"success": False, "message": "Action is required"}
+
+    # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+    if not frappe.has_permission("Job Offer", ptype="write", doc=job_offer_name):
+        return {"success": False, "message": "You do not have permission to update this Job Offer"}
 
     try:
         doc = frappe.get_doc("Job Offer", job_offer_name)
@@ -755,5 +842,4 @@ def apply_offer_workflow_action():
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Apply Workflow Action Failed")
         frappe.db.rollback()
-        return {"success": False, "message": str(e)}    
-    
+        return {"success": False, "message": str(e)}

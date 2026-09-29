@@ -1,47 +1,125 @@
 import frappe
 from datetime import datetime
 import json
+from frappe import _
 
-@frappe.whitelist(allow_guest=True)
+from resume.api.permissions import is_site_hr_user
+
+
+def _check_site_hr_owner(doctype, name, message=None):
+    """
+    Restrict Site HR User / Site HR Manager to records created by themselves.
+    Other roles keep existing access.
+    """
+    if not is_site_hr_user():
+        return True
+
+    owner = frappe.db.get_value(
+        doctype,
+        name,
+        "owner"
+    )
+
+    if owner != frappe.session.user:
+        frappe.throw(
+            message
+            or _("You do not have permission to access this record."),
+            title=_("Permission Denied")
+        )
+
+    return True
+
+
+@frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Interview Feedback record create karta hai
 def create_interview_feedback():
     """Create a new interview feedback"""
     try:
         data = frappe.form_dict
-        frappe.log_error("Received interview feedback data: {data}".format(data=json.dumps(dict(data), indent=2)), "Interview Feedback Debug")
+
+        frappe.log_error(
+            "Received interview feedback data: {data}".format(
+                data=json.dumps(dict(data), indent=2)
+            ),
+            "Interview Feedback Debug"
+        )
 
         # Define required fields
         required_fields = ["interview", "interviewer", "result"]
+
         for field in required_fields:
             if not data.get(field):
                 frappe.throw(f"{field} is required")
+
+        # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+        # Ye Interview Feedback doctype ka naya record create karta hai.
+        if not frappe.has_permission("Interview Feedback", ptype="create"):
+            frappe.throw("You do not have permission to create Interview Feedback")
+
+        # ---------------------------------------------------------
+        # SITE HR OWNER CHECK
+        # ---------------------------------------------------------
+        # Site HR can create feedback only for their own Interview.
+        # Existing logic remains unchanged for other roles.
+        if data.get("interview") and is_site_hr_user():
+            _check_site_hr_owner(
+                "Interview",
+                data.get("interview"),
+                _("You can create feedback only for your own Interview.")
+            )
 
         # Get valid results from the doctype field options
         try:
             meta = frappe.get_meta("Interview Feedback")
             result_field = None
+
             for field in meta.fields:
                 if field.fieldname == "result":
                     result_field = field
                     break
-            
+
             if result_field and result_field.options:
-                valid_results = [opt.strip() for opt in result_field.options.split('\n') if opt.strip()]
+                valid_results = [
+                    opt.strip()
+                    for opt in result_field.options.split('\n')
+                    if opt.strip()
+                ]
             else:
-                valid_results = ["Cleared", "Rejected", "On Hold", "Pending Review"]
+                valid_results = [
+                    "Cleared",
+                    "Rejected",
+                    "On Hold",
+                    "Pending Review"
+                ]
+
         except:
-            valid_results = ["Cleared", "Rejected", "On Hold", "Pending Review"]
+            valid_results = [
+                "Cleared",
+                "Rejected",
+                "On Hold",
+                "Pending Review"
+            ]
 
         # Validate result
         result = data.get("result")
-        
+
         if not result or result not in valid_results:
-            frappe.throw(f"Invalid or missing result. Must be one of {', '.join(valid_results)}")
+            frappe.throw(
+                f"Invalid or missing result. Must be one of {', '.join(valid_results)}"
+            )
 
         # Validate designation if provided
         position_applied_for = data.get("position_applied_for")
+
         if position_applied_for:
-            if not frappe.db.exists("Designation", position_applied_for):
-                frappe.log_error(f"Designation '{position_applied_for}' does not exist", "Invalid Designation")
+            if not frappe.db.exists(
+                "Designation",
+                position_applied_for
+            ):
+                frappe.log_error(
+                    f"Designation '{position_applied_for}' does not exist",
+                    "Invalid Designation"
+                )
+
                 # Set to None if designation doesn't exist
                 position_applied_for = None
 
@@ -49,16 +127,28 @@ def create_interview_feedback():
         final_score_recommendation = []
         not_shortlisted_reason = []
         withdrawn_reason = []
-        
+
         if data.get("final_score_recommendation"):
-            final_score_recommendation = json.loads(data.final_score_recommendation) if isinstance(data.final_score_recommendation, str) else data.final_score_recommendation
-            
+            final_score_recommendation = (
+                json.loads(data.final_score_recommendation)
+                if isinstance(data.final_score_recommendation, str)
+                else data.final_score_recommendation
+            )
+
         if data.get("not_shortlisted_reason"):
-            not_shortlisted_reason = json.loads(data.not_shortlisted_reason) if isinstance(data.not_shortlisted_reason, str) else data.not_shortlisted_reason
-            
+            not_shortlisted_reason = (
+                json.loads(data.not_shortlisted_reason)
+                if isinstance(data.not_shortlisted_reason, str)
+                else data.not_shortlisted_reason
+            )
+
         if data.get("withdrawn_reason"):
-            withdrawn_reason = json.loads(data.withdrawn_reason) if isinstance(data.withdrawn_reason, str) else data.withdrawn_reason
-        
+            withdrawn_reason = (
+                json.loads(data.withdrawn_reason)
+                if isinstance(data.withdrawn_reason, str)
+                else data.withdrawn_reason
+            )
+
         # Map options to field names for Final Score
         final_score_map = {
             "Average (10 to 13)": "custom_average_10_to_13",
@@ -68,7 +158,7 @@ def create_interview_feedback():
             "To be Offered": "custom__to_be__offered",
             "Candidature Withdrawn": "custom_candidature_withdrawn"
         }
-        
+
         # Map options to field names for Not Shortlisted
         not_shortlisted_map = {
             "No Show for interview": "custom_no_show_for_interview",
@@ -82,7 +172,7 @@ def create_interview_feedback():
             "Poor Interview Ratings": "custom_poor_interview_ratings",
             "Behavioural Attributes": "custom_behavioural_attributes"
         }
-        
+
         # Map options to field names for Withdrawn Reason
         withdrawn_map = {
             "Another Job": "custom_another_job",
@@ -91,7 +181,7 @@ def create_interview_feedback():
             "Job Duties": "custom_job_duties",
             "Salary too low": "custom_salary_too_low"
         }
-        
+
         # Create the Interview Feedback document
         feedback_doc = frappe.get_doc({
             "doctype": "Interview Feedback",
@@ -109,87 +199,165 @@ def create_interview_feedback():
             "custom_applicant_rating": data.get("applicant_rating"),
             "custom_description": data.get("remarks"),
         })
-        
+
         # Set Final Score checkboxes
         for option in final_score_recommendation:
             field_name = final_score_map.get(option)
+
             if field_name:
                 feedback_doc.set(field_name, 1)
-        
+
         # Set Not Shortlisted checkboxes
         for option in not_shortlisted_reason:
             field_name = not_shortlisted_map.get(option)
+
             if field_name:
                 feedback_doc.set(field_name, 1)
-        
+
         # Set Withdrawn Reason checkboxes
         for option in withdrawn_reason:
             field_name = withdrawn_map.get(option)
+
             if field_name:
                 feedback_doc.set(field_name, 1)
-        
+
         # Add skill assessments if provided
         if data.get("skill_assessments"):
-            skill_assessments = json.loads(data.skill_assessments) if isinstance(data.skill_assessments, str) else data.skill_assessments
-            
+
+            skill_assessments = (
+                json.loads(data.skill_assessments)
+                if isinstance(data.skill_assessments, str)
+                else data.skill_assessments
+            )
+
             meta = frappe.get_meta("Interview Feedback")
             child_table_fieldname = None
-            
+
             for field in meta.fields:
-                if field.fieldtype == "Table" and "skill" in field.fieldname.lower():
+                if (
+                    field.fieldtype == "Table"
+                    and "skill" in field.fieldname.lower()
+                ):
                     child_table_fieldname = field.fieldname
                     break
-            
+
             if child_table_fieldname:
+
                 for skill in skill_assessments:
+
                     if skill.get("skill") and skill.get("rating"):
-                        skill_name = str(skill.get("skill")).strip()
-                        rating_value = int(skill.get("rating"))
-                        
-                        if not frappe.db.exists("Skill", skill_name):
-                            frappe.throw(f"Skill '{skill_name}' does not exist. Please create it first or select from available skills.")
-                        
+
+                        skill_name = str(
+                            skill.get("skill")
+                        ).strip()
+
+                        rating_value = int(
+                            skill.get("rating")
+                        )
+
+                        if not frappe.db.exists(
+                            "Skill",
+                            skill_name
+                        ):
+                            frappe.throw(
+                                f"Skill '{skill_name}' does not exist. Please create it first or select from available skills."
+                            )
+
                         frappe_rating = rating_value / 5.0
-                        
-                        feedback_doc.append(child_table_fieldname, {
-                            "skill": skill_name,
-                            "rating": frappe_rating
-                        })
-        
-        feedback_doc.insert(ignore_permissions=True)
+
+                        feedback_doc.append(
+                            child_table_fieldname,
+                            {
+                                "skill": skill_name,
+                                "rating": frappe_rating
+                            }
+                        )
+
+        feedback_doc.insert(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
+
         frappe.db.commit()
-        
-        frappe.log_error(f"Successfully created Interview Feedback: {feedback_doc.name}", "Interview Feedback Success")
-        
+
+        frappe.log_error(
+            f"Successfully created Interview Feedback: {feedback_doc.name}",
+            "Interview Feedback Success"
+        )
+
         return {
             "message": f"Interview Feedback {feedback_doc.name} created successfully.",
             "name": feedback_doc.name,
             "doc": feedback_doc.as_dict()
         }
-        
+
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Interview Feedback Creation Failed")
+
+        frappe.log_error(
+            frappe.get_traceback(),
+            "Interview Feedback Creation Failed"
+        )
+
         frappe.db.rollback()
-        frappe.throw(f"Failed to create interview feedback: {str(e)}")
+
+        frappe.throw(
+            f"Failed to create interview feedback: {str(e)}"
+        )
 
 
 @frappe.whitelist(allow_guest=True)
 def get_interview_feedbacks():
     """Get list of all interview feedbacks"""
     try:
-        feedbacks = frappe.db.sql("""
-            SELECT 
-                name, interview, interviewer, result, 
-                creation, modified, owner, docstatus
-            FROM `tabInterview Feedback`
-            ORDER BY creation DESC
-        """, as_dict=True)
-        
+
+        # ---------------------------------------------------------
+        # SITE HR OWNER FILTER
+        # ---------------------------------------------------------
+        if is_site_hr_user():
+
+            feedbacks = frappe.db.sql(
+                """
+                SELECT
+                    name,
+                    interview,
+                    interviewer,
+                    result,
+                    creation,
+                    modified,
+                    owner,
+                    docstatus
+                FROM `tabInterview Feedback`
+                WHERE owner = %s
+                ORDER BY creation DESC
+                """,
+                (frappe.session.user,),
+                as_dict=True
+            )
+
+        else:
+
+            feedbacks = frappe.db.sql("""
+                SELECT
+                    name,
+                    interview,
+                    interviewer,
+                    result,
+                    creation,
+                    modified,
+                    owner,
+                    docstatus
+                FROM `tabInterview Feedback`
+                ORDER BY creation DESC
+            """, as_dict=True)
+
         result = []
+
         for feedback in feedbacks:
+
             try:
-                doc = frappe.get_doc("Interview Feedback", feedback.name)
-                
+
+                doc = frappe.get_doc(
+                    "Interview Feedback",
+                    feedback.name
+                )
+
                 feedback_data = {
                     "name": doc.name,
                     "interview": doc.interview,
@@ -198,43 +366,89 @@ def get_interview_feedbacks():
                     "creation": str(doc.creation),
                     "modified": str(doc.modified),
                     "owner": doc.owner,
-                    "status": "Submitted" if doc.docstatus == 1 else "Draft",
-                    "candidate_name": doc.get("custom_candidate_name"),
-                    "position_applied_for": doc.get("custom_position_applied_for"),
-                    "department": doc.get("custom_department"),
-                    "interview_date": str(doc.get("custom_interview_date")) if doc.get("custom_interview_date") else None,
+                    "status": "Submitted"
+                    if doc.docstatus == 1
+                    else "Draft",
+                    "candidate_name": doc.get(
+                        "custom_candidate_name"
+                    ),
+                    "position_applied_for": doc.get(
+                        "custom_position_applied_for"
+                    ),
+                    "department": doc.get(
+                        "custom_department"
+                    ),
+                    "interview_date": str(
+                        doc.get("custom_interview_date")
+                    )
+                    if doc.get("custom_interview_date")
+                    else None,
                     "feedback": doc.get("feedback"),
                     "skills_count": 0
                 }
-                
+
                 if doc.interview:
+
                     try:
-                        interview = frappe.get_doc("Interview", doc.interview)
-                        feedback_data["interview_round"] = interview.get("interview_round")
-                        feedback_data["job_applicant"] = interview.get("job_applicant")
-                        
-                        if feedback_data.get("job_applicant"):
+
+                        interview = frappe.get_doc(
+                            "Interview",
+                            doc.interview
+                        )
+
+                        # Existing logic
+                        feedback_data["interview_round"] = (
+                            interview.get("interview_round")
+                        )
+
+                        feedback_data["job_applicant"] = (
+                            interview.get("job_applicant")
+                        )
+
+                        if feedback_data.get(
+                            "job_applicant"
+                        ):
+
                             try:
-                                applicant = frappe.get_doc("Job Applicant", feedback_data["job_applicant"])
-                                feedback_data["applicant_name"] = applicant.applicant_name
+
+                                applicant = frappe.get_doc(
+                                    "Job Applicant",
+                                    feedback_data["job_applicant"]
+                                )
+
+                                feedback_data["applicant_name"] = (
+                                    applicant.applicant_name
+                                )
+
                             except:
                                 pass
+
                     except:
                         pass
-                
+
                 result.append(feedback_data)
+
             except Exception as e:
-                frappe.log_error(f"Error fetching feedback {feedback.name}: {str(e)}")
+
+                frappe.log_error(
+                    f"Error fetching feedback {feedback.name}: {str(e)}"
+                )
+
                 continue
-        
+
         return {
             "message": "Interview feedbacks fetched successfully",
             "data": result,
             "count": len(result)
         }
-        
+
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Interview Feedbacks Fetch Failed")
+
+        frappe.log_error(
+            frappe.get_traceback(),
+            "Interview Feedbacks Fetch Failed"
+        )
+
         return {
             "message": f"Failed to fetch interview feedbacks: {str(e)}",
             "data": [],
@@ -242,61 +456,124 @@ def get_interview_feedbacks():
         }
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Interview Feedback record delete karta hai
 def delete_interview_feedback(name):
     """Delete an interview feedback"""
     try:
+
         if not name:
             frappe.throw("Feedback name is required")
-        
-        frappe.delete_doc("Interview Feedback", name, ignore_permissions=True)
+
+        # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+        if not frappe.has_permission("Interview Feedback", ptype="delete", doc=name):
+            frappe.throw("You do not have permission to delete this Interview Feedback")
+
+        # ---------------------------------------------------------
+        # SITE HR OWNER CHECK
+        # ---------------------------------------------------------
+        _check_site_hr_owner(
+            "Interview Feedback",
+            name,
+            _("You can delete only your own Interview Feedback.")
+        )
+
+        frappe.delete_doc(
+            "Interview Feedback",
+            name,
+            ignore_permissions=False  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
+        )
+
         frappe.db.commit()
-        
+
         return {
             "message": f"Interview Feedback {name} deleted successfully"
         }
-        
+
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Interview Feedback Deletion Failed")
+
+        frappe.log_error(
+            frappe.get_traceback(),
+            "Interview Feedback Deletion Failed"
+        )
+
         frappe.db.rollback()
-        frappe.throw(f"Failed to delete interview feedback: {str(e)}")
+
+        frappe.throw(
+            f"Failed to delete interview feedback: {str(e)}"
+        )
 
 
 @frappe.whitelist(allow_guest=True)
 def get_skills():
     """Get list of all skills"""
     try:
-        skills = frappe.get_all("Skill", fields=["name", "skill_name"], order_by="name asc")
+
+        skills = frappe.get_all(
+            "Skill",
+            fields=["name", "skill_name"],
+            order_by="name asc"
+        )
+
         return {
             "message": "Skills fetched successfully",
             "data": [skill.name for skill in skills]
         }
+
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Skills Fetch Failed")
-        return {"message": f"Failed to fetch skills: {str(e)}", "data": []}
+
+        frappe.log_error(
+            frappe.get_traceback(),
+            "Skills Fetch Failed"
+        )
+
+        return {
+            "message": f"Failed to fetch skills: {str(e)}",
+            "data": []
+        }
 
 
 @frappe.whitelist(allow_guest=True)
 def get_applicant_rating_options():
     """Get applicant rating options"""
     try:
+
         meta = frappe.get_meta("Interview Feedback")
+
         for field in meta.fields:
+
             if field.fieldname == "custom_applicant_rating":
+
                 if field.options:
+
                     return {
                         "message": "Success",
-                        "data": [opt.strip() for opt in field.options.split('\n') if opt.strip()]
+                        "data": [
+                            opt.strip()
+                            for opt in field.options.split('\n')
+                            if opt.strip()
+                        ]
                     }
-        
+
         return {
             "message": "Using defaults",
-            "data": ["Unsatisfactory", "Marginal", "Satisfactory", "Superior"]
+            "data": [
+                "Unsatisfactory",
+                "Marginal",
+                "Satisfactory",
+                "Superior"
+            ]
         }
+
     except:
+
         return {
             "message": "Using defaults",
-            "data": ["Unsatisfactory", "Marginal", "Satisfactory", "Superior"]
+            "data": [
+                "Unsatisfactory",
+                "Marginal",
+                "Satisfactory",
+                "Superior"
+            ]
         }
 
 
@@ -304,20 +581,40 @@ def get_applicant_rating_options():
 def get_department_options():
     """Get department options"""
     try:
-        departments = frappe.get_all("Department", fields=["name"], order_by="name asc")
+
+        departments = frappe.get_all(
+            "Department",
+            fields=["name"],
+            order_by="name asc"
+        )
+
         if departments:
+
             return {
                 "message": "Success",
                 "data": [dept.name for dept in departments]
             }
+
         return {
             "message": "Using defaults",
-            "data": ["Accounts", "Human Resources", "Marketing", "Operations"]
+            "data": [
+                "Accounts",
+                "Human Resources",
+                "Marketing",
+                "Operations"
+            ]
         }
+
     except:
+
         return {
             "message": "Using defaults",
-            "data": ["Accounts", "Human Resources", "Marketing", "Operations"]
+            "data": [
+                "Accounts",
+                "Human Resources",
+                "Marketing",
+                "Operations"
+            ]
         }
 
 
@@ -330,13 +627,15 @@ def get_department_options():
 #             return {"message": "Success", "data": [loc.name for loc in locations]}
 #     except:
 #         pass
-    
+#
 #     return {"message": "Using defaults", "data": ["Borivali,Mumbai"]}
+
 
 @frappe.whitelist(allow_guest=True)
 def get_location_options():
     """Get location options"""
     try:
+
         locations = frappe.get_all(
             "Cost Center",
             filters={"is_group": 0},
@@ -344,37 +643,61 @@ def get_location_options():
             order_by="name asc",
             limit_page_length=0
         )
-        return {"message": "Success", "data": [loc.name for loc in locations]}
+
+        return {
+            "message": "Success",
+            "data": [loc.name for loc in locations]
+        }
+
     except Exception as e:
-        frappe.log_error(str(e), "get_location_options")
-        return {"message": "Error", "data": []}
+
+        frappe.log_error(
+            str(e),
+            "get_location_options"
+        )
+
+        return {
+            "message": "Error",
+            "data": []
+        }
 
 
 @frappe.whitelist(allow_guest=True)
 def get_designation_options():
     """Get designation options from Designation doctype"""
     try:
+
         # Fetch all designations
         designations = frappe.get_all(
             "Designation",
             fields=["name"],
             order_by="name asc"
         )
-        
+
         if designations and len(designations) > 0:
-            designation_list = [d.name for d in designations]
+
+            designation_list = [
+                d.name for d in designations
+            ]
+
             return {
                 "message": "Success",
                 "data": designation_list
             }
-        
+
         # If no designations found, return empty array
         return {
             "message": "No designations found",
             "data": []
         }
+
     except Exception as e:
-        frappe.log_error(f"Error fetching designations: {str(e)}\n{frappe.get_traceback()}", "Designation Error")
+
+        frappe.log_error(
+            f"Error fetching designations: {str(e)}\n{frappe.get_traceback()}",
+            "Designation Error"
+        )
+
         # Return empty array on error so frontend doesn't break
         return {
             "message": f"Error: {str(e)}",
@@ -387,11 +710,11 @@ def get_designation_options():
 #     """Get list of interviews with interviewer details"""
 #     try:
 #         interviews = frappe.get_all(
-#             "Interview", 
-#             fields=["name"], 
+#             "Interview",
+#             fields=["name"],
 #             order_by="creation desc"
 #         )
-        
+#
 #         result = []
 #         for interview_name in interviews:
 #             try:
@@ -404,7 +727,7 @@ def get_designation_options():
 #                     "status": doc.get("status"),
 #                     "interviewer": None
 #                 }
-                
+#
 #                 # Get first interviewer
 #                 try:
 #                     interviewer_details = frappe.db.get_all(
@@ -413,12 +736,12 @@ def get_designation_options():
 #                         fields=["interviewer"],
 #                         limit=1
 #                     )
-                    
+#
 #                     if interviewer_details and len(interviewer_details) > 0:
 #                         interview_data["interviewer"] = interviewer_details[0].get("interviewer")
 #                 except:
 #                     pass
-                
+#
 #                 # Get applicant name
 #                 if interview_data.get("job_applicant"):
 #                     try:
@@ -426,16 +749,15 @@ def get_designation_options():
 #                         interview_data["applicant_name"] = applicant.applicant_name
 #                     except:
 #                         pass
-                
+#
 #                 result.append(interview_data)
 #             except:
 #                 continue
-        
+#
 #         return {"message": "Success", "data": result}
 #     except Exception as e:
 #         frappe.log_error(frappe.get_traceback(), "Get Interviews Failed")
 #         return {"message": f"Error: {str(e)}", "data": []}
-
 
 
 # @frappe.whitelist(allow_guest=True)
@@ -444,16 +766,16 @@ def get_designation_options():
 #     try:
 #         # --- NEW FILTERING LOGIC START ---
 #         user = frappe.session.user
-        
+#
 #         # Check if the user has administrative privileges
 #         is_admin = frappe.db.exists("Has Role", {
-#             "parent": user, 
+#             "parent": user,
 #             "role": ["in", ["HR Manager", "System Manager"]]
 #         })
-
+#
 #         # Build base filters for the parent Interview doc
 #         interview_filters = {}
-        
+#
 #         # If not an admin, restrict to only interviews assigned to this user
 #         if not is_admin and user != "Guest":
 #             assigned_interviews = frappe.get_all(
@@ -461,24 +783,26 @@ def get_designation_options():
 #                 filters={"interviewer": user},
 #                 fields=["parent"]
 #             )
-            
+#
 #             # If they have no assigned interviews, return empty data immediately
 #             if not assigned_interviews:
 #                 return {"message": "Success", "data": []}
-                
+#
 #             # Extract the parent interview IDs/Names
 #             allowed_interview_names = [d.parent for d in assigned_interviews]
 #             interview_filters["name"] = ["in", allowed_interview_names]
+#
 #         # --- NEW FILTERING LOGIC END ---
-
+#
 #         interviews = frappe.get_all(
-#             "Interview", 
-#             filters=interview_filters, # Apply the filters here
-#             fields=["name"], 
+#             "Interview",
+#             filters=interview_filters,
+#             fields=["name"],
 #             order_by="creation desc"
 #         )
-        
+#
 #         result = []
+#
 #         for interview_name in interviews:
 #             try:
 #                 doc = frappe.get_doc("Interview", interview_name.name)
@@ -490,7 +814,7 @@ def get_designation_options():
 #                     "status": doc.get("status"),
 #                     "interviewer": None
 #                 }
-                
+#
 #                 # Get first interviewer
 #                 try:
 #                     interviewer_details = frappe.db.get_all(
@@ -499,77 +823,118 @@ def get_designation_options():
 #                         fields=["interviewer"],
 #                         limit=1
 #                     )
-                    
+#
 #                     if interviewer_details and len(interviewer_details) > 0:
 #                         interview_data["interviewer"] = interviewer_details[0].get("interviewer")
 #                 except:
 #                     pass
-                
+#
 #                 # Get applicant name
 #                 if interview_data.get("job_applicant"):
 #                     try:
-#                         applicant = frappe.get_doc("Job Applicant", interview_data["job_applicant"])
+#                         applicant = frappe.get_doc(
+#                             "Job Applicant",
+#                             interview_data["job_applicant"]
+#                         )
 #                         interview_data["applicant_name"] = applicant.applicant_name
 #                     except:
 #                         pass
-                
+#
 #                 result.append(interview_data)
+#
 #             except:
 #                 continue
-        
+#
 #         return {"message": "Success", "data": result}
+#
 #     except Exception as e:
 #         frappe.log_error(frappe.get_traceback(), "Get Interviews Failed")
 #         return {"message": f"Error: {str(e)}", "data": []}
 
 
-
 @frappe.whitelist(allow_guest=True)
 def get_interviews():
     try:
+
         user = frappe.session.user
-        
-        is_admin = frappe.db.exists("Has Role", {
-            "parent": user, 
-            "role": ["in", ["HR Manager", "System Manager"]]
-        })
+
+        is_admin = frappe.db.exists(
+            "Has Role",
+            {
+                "parent": user,
+                "role": ["in", ["HR Manager", "System Manager"]]
+            }
+        )
 
         interview_filters = {}
-        
+
+        # ---------------------------------------------------------
+        # EXISTING LOGIC
+        # ---------------------------------------------------------
         if not is_admin and user != "Guest":
+
             assigned_interviews = frappe.get_all(
                 "Interview Detail",
                 filters={"interviewer": user},
                 fields=["parent"]
             )
+
             if not assigned_interviews:
-                return {"message": "Success", "data": []}
-            allowed_interview_names = [d.parent for d in assigned_interviews]
-            interview_filters["name"] = ["in", allowed_interview_names]
+                return {
+                    "message": "Success",
+                    "data": []
+                }
+
+            allowed_interview_names = [
+                d.parent
+                for d in assigned_interviews
+            ]
+
+            interview_filters["name"] = [
+                "in",
+                allowed_interview_names
+            ]
+
+        # ---------------------------------------------------------
+        # SITE HR OWNER FILTER
+        # ---------------------------------------------------------
+        if is_site_hr_user():
+            interview_filters["owner"] = user
 
         interviews = frappe.get_all(
-            "Interview", 
+            "Interview",
             filters=interview_filters,
-            fields=["name"], 
+            fields=["name"],
             order_by="creation desc"
         )
 
-        # ✅ NEW: Get all interviews that already have feedback submitted
+        # Get all interviews that already have feedback submitted
         interviews_with_feedback = frappe.get_all(
             "Interview Feedback",
             fields=["interview"],
-            filters={"docstatus": ["!=", 2]}  # exclude cancelled
+            filters={"docstatus": ["!=", 2]}
         )
-        excluded_interviews = {f.interview for f in interviews_with_feedback}
-        
+
+        excluded_interviews = {
+            f.interview
+            for f in interviews_with_feedback
+        }
+
         result = []
+
         for interview_name in interviews:
-            # ✅ NEW: Skip interviews that already have feedback
+
+            # Skip interviews that already have feedback
             if interview_name.name in excluded_interviews:
                 continue
 
             try:
-                doc = frappe.get_doc("Interview", interview_name.name)
+
+                doc = frappe.get_doc(
+                    "Interview",
+                    interview_name.name
+                )
+
                 interview_data = {
                     "name": doc.name,
                     "job_applicant": doc.get("job_applicant"),
@@ -578,125 +943,167 @@ def get_interviews():
                     "status": doc.get("status"),
                     "interviewer": None
                 }
-                
+
                 try:
+
                     interviewer_details = frappe.db.get_all(
                         "Interview Detail",
                         filters={"parent": doc.name},
                         fields=["interviewer"],
                         limit=1
                     )
+
                     if interviewer_details:
-                        interview_data["interviewer"] = interviewer_details[0].get("interviewer")
+
+                        interview_data["interviewer"] = (
+                            interviewer_details[0].get(
+                                "interviewer"
+                            )
+                        )
+
                 except:
                     pass
-                
+
                 if interview_data.get("job_applicant"):
+
                     try:
-                        applicant = frappe.get_doc("Job Applicant", interview_data["job_applicant"])
-                        interview_data["applicant_name"] = applicant.applicant_name
+
+                        applicant = frappe.get_doc(
+                            "Job Applicant",
+                            interview_data["job_applicant"]
+                        )
+
+                        interview_data["applicant_name"] = (
+                            applicant.applicant_name
+                        )
+
                     except:
                         pass
-                
+
                 result.append(interview_data)
+
             except:
                 continue
-        
-        return {"message": "Success", "data": result}
+
+        return {
+            "message": "Success",
+            "data": result
+        }
+
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Get Interviews Failed")
-        return {"message": f"Error: {str(e)}", "data": []}
 
+        frappe.log_error(
+            frappe.get_traceback(),
+            "Get Interviews Failed"
+        )
 
+        return {
+            "message": f"Error: {str(e)}",
+            "data": []
+        }
 
-
-
-
-
-
-# @frappe.whitelist(allow_guest=True)
-# def get_interviewers():
-#     """Get list of interviewers"""
-#     try:
-#         users = frappe.get_all(
-#             "User",
-#             fields=["name", "email", "full_name", "first_name"],
-#             filters={"enabled": 1, "name": ["not in", ["Administrator", "Guest"]]},
-#             order_by="name"
-#         )
-        
-#         result = []
-#         for user in users:
-#             result.append({
-#                 "name": user.name,
-#                 "full_name": user.full_name or user.first_name or user.name,
-#                 "email": user.email
-#             })
-        
-#         return {"message": "Success", "data": result}
-#     except Exception as e:
-#         return {"message": f"Error: {str(e)}", "data": []}
-
-
-
-import frappe
 
 @frappe.whitelist(allow_guest=True)
 def get_interviewers():
     """Get list of interviewers"""
     try:
+
         user = frappe.session.user
-        
-        # 1. Check if the user has administrative privileges
-        is_admin = frappe.db.exists("Has Role", {
-            "parent": user, 
-            "role": ["in", ["Administrator", "HR Manager", "System Manager"]]
-        })
 
-        # 2. Set up the base filters
+        # FIXED: Feedback form's interviewer list must always show ALL
+        # enabled interviewers, not just the logged-in user — otherwise a
+        # Recruitment User/Manager filling feedback for someone else's
+        # interview won't see the actual assigned interviewer in the
+        # dropdown. (Matches resume.api.interview.get_interviewers logic.)
         filters = {
-            "enabled": 1, 
-            "name": ["not in", ["Administrator", "Guest"]]
+            "enabled": 1,
+            "name": [
+                "not in",
+                [
+                    "Administrator",
+                    "Guest"
+                ]
+            ]
         }
-        
-        # 3. If not an admin, restrict the list to ONLY themselves
-        if not is_admin and user != "Guest":
-            filters["name"] = user
 
-        # 4. Fetch the users using the dynamic filters
         users = frappe.get_all(
             "User",
-            fields=["name", "email", "full_name", "first_name"],
+            fields=[
+                "name",
+                "email",
+                "full_name",
+                "first_name"
+            ],
             filters=filters,
             order_by="name"
         )
-        
+
         result = []
+
         for u in users:
+
             result.append({
                 "name": u.name,
-                "full_name": u.full_name or u.first_name or u.name,
+                "full_name": (
+                    u.full_name
+                    or u.first_name
+                    or u.name
+                ),
                 "email": u.email
             })
-        
-        return {"message": "Success", "data": result}
+
+        return {
+            "message": "Success",
+            "data": result
+        }
+
     except Exception as e:
-        return {"message": f"Error: {str(e)}", "data": []}
+
+        return {
+            "message": f"Error: {str(e)}",
+            "data": []
+        }
+
 
 @frappe.whitelist(allow_guest=True)
 def get_result_options():
     """Get result options"""
     try:
+
         meta = frappe.get_meta("Interview Feedback")
+
         for field in meta.fields:
+
             if field.fieldname == "result" and field.options:
+
                 return {
                     "message": "Success",
-                    "data": [opt.strip() for opt in field.options.split('\n') if opt.strip()]
+                    "data": [
+                        opt.strip()
+                        for opt in field.options.split('\n')
+                        if opt.strip()
+                    ]
                 }
-        return {"message": "Using defaults", "data": ["Cleared", "Rejected", "On Hold"]}
+
+        return {
+            "message": "Using defaults",
+            "data": [
+                "Cleared",
+                "Rejected",
+                "On Hold"
+            ]
+        }
+
     except:
-        return {"message": "Using defaults", "data": ["Cleared", "Rejected", "On Hold"]}
+
+        return {
+            "message": "Using defaults",
+            "data": [
+                "Cleared",
+                "Rejected",
+                "On Hold"
+            ]
+        }
 
 
 @frappe.whitelist(allow_guest=True)
@@ -705,8 +1112,12 @@ def get_final_score_options():
     return {
         "message": "Success",
         "data": [
-            "Average (10 to 13)", "Good (14 to 18)", "Excellent (19 to 21)",
-            "Not Shortlisted", "To be Offered", "Candidature Withdrawn"
+            "Average (10 to 13)",
+            "Good (14 to 18)",
+            "Excellent (19 to 21)",
+            "Not Shortlisted",
+            "To be Offered",
+            "Candidature Withdrawn"
         ]
     }
 
@@ -717,10 +1128,16 @@ def get_not_shortlisted_options():
     return {
         "message": "Success",
         "data": [
-            "No Show for interview", "Not as qualified as others", "Test Scores",
-            "Selected for other position", "Insufficient Skills", "Offer Denied",
-            "Reference Check Unsatisfactory", "Good Skills/Exp, not 1st choice",
-            "Poor Interview Ratings", "Behavioural Attributes"
+            "No Show for interview",
+            "Not as qualified as others",
+            "Test Scores",
+            "Selected for other position",
+            "Insufficient Skills",
+            "Offer Denied",
+            "Reference Check Unsatisfactory",
+            "Good Skills/Exp, not 1st choice",
+            "Poor Interview Ratings",
+            "Behavioural Attributes"
         ]
     }
 
@@ -731,8 +1148,11 @@ def get_withdrawn_reason_options():
     return {
         "message": "Success",
         "data": [
-            "Another Job", "Changed Mind", "Hours/Work Schedule",
-            "Job Duties", "Salary too low"
+            "Another Job",
+            "Changed Mind",
+            "Hours/Work Schedule",
+            "Job Duties",
+            "Salary too low"
         ]
     }
 
@@ -741,12 +1161,28 @@ def get_withdrawn_reason_options():
 def get_job_applicant_details(job_applicant):
     """Get job applicant details including designation, department, and location from Job Opening"""
     try:
+
         if not job_applicant:
-            return {"message": "No job applicant provided", "data": None}
-        
+            return {
+                "message": "No job applicant provided",
+                "data": None
+            }
+
         # Fetch job applicant details
-        applicant = frappe.get_doc("Job Applicant", job_applicant)
-        
+        applicant = frappe.get_doc(
+            "Job Applicant",
+            job_applicant
+        )
+
+        # ---------------------------------------------------------
+        # SITE HR OWNER CHECK
+        # ---------------------------------------------------------
+        _check_site_hr_owner(
+            "Job Applicant",
+            job_applicant,
+            _("You can access only your own Job Applicant.")
+        )
+
         result = {
             "name": applicant.name,
             "applicant_name": applicant.applicant_name,
@@ -755,63 +1191,151 @@ def get_job_applicant_details(job_applicant):
             "department": None,
             "location": None
         }
-        
+
         # Get details from linked Job Opening
         job_opening_name = None
-        
+
         # First try to get from job_opening field directly
         if hasattr(applicant, 'job_opening') and applicant.job_opening:
             job_opening_name = applicant.job_opening
-        
+
         # Also try job_title field which might contain the Job Opening reference
-        if not job_opening_name and hasattr(applicant, 'job_title') and applicant.job_title:
+        if (
+            not job_opening_name
+            and hasattr(applicant, 'job_title')
+            and applicant.job_title
+        ):
+
             # Check if job_title is actually a Job Opening ID
-            if frappe.db.exists("Job Opening", applicant.job_title):
+            if frappe.db.exists(
+                "Job Opening",
+                applicant.job_title
+            ):
                 job_opening_name = applicant.job_title
-        
+
         # If Job Opening is found, fetch all required details
         if job_opening_name:
+
             try:
-                job_opening = frappe.get_doc("Job Opening", job_opening_name)
-                
+
+                # Site HR should only access own Job Opening
+                if is_site_hr_user():
+                    _check_site_hr_owner(
+                        "Job Opening",
+                        job_opening_name,
+                        _("You can access only your own Job Opening.")
+                    )
+
+                job_opening = frappe.get_doc(
+                    "Job Opening",
+                    job_opening_name
+                )
+
                 # Get designation from Job Opening
-                if hasattr(job_opening, 'designation') and job_opening.designation:
-                    result["designation"] = job_opening.designation
-                elif hasattr(job_opening, 'job_title') and job_opening.job_title:
-                    result["designation"] = job_opening.job_title
-                
+                if (
+                    hasattr(job_opening, 'designation')
+                    and job_opening.designation
+                ):
+
+                    result["designation"] = (
+                        job_opening.designation
+                    )
+
+                elif (
+                    hasattr(job_opening, 'job_title')
+                    and job_opening.job_title
+                ):
+
+                    result["designation"] = (
+                        job_opening.job_title
+                    )
+
                 # Get department from Job Opening
-                if hasattr(job_opening, 'department') and job_opening.department:
-                    result["department"] = job_opening.department
-                
+                if (
+                    hasattr(job_opening, 'department')
+                    and job_opening.department
+                ):
+
+                    result["department"] = (
+                        job_opening.department
+                    )
+
                 # Get location from Job Opening
-                if hasattr(job_opening, 'location') and job_opening.location:
-                    result["location"] = job_opening.location
-                    
+                if (
+                    hasattr(job_opening, 'location')
+                    and job_opening.location
+                ):
+
+                    result["location"] = (
+                        job_opening.location
+                    )
+
             except Exception as e:
-                pass  # Job Opening not found or error accessing it
-        
-        # Return the result (don't log to avoid title length error)
-        return {"message": "Success", "data": result}
-        
+                pass
+
+        # Return the result
+        return {
+            "message": "Success",
+            "data": result
+        }
+
     except Exception as e:
-        # Return error without detailed logging to avoid title length issues
-        return {"message": f"Error: {str(e)}", "data": None}
+
+        return {
+            "message": f"Error: {str(e)}",
+            "data": None
+        }
 
 
 @frappe.whitelist(allow_guest=True)
 def get_candidate_feedback_list():
     """Get candidate feedback list - SIMPLE VERSION"""
     try:
-        feedback_list = frappe.db.sql("""
-            SELECT name, interview, interviewer, result, feedback, creation, modified
-            FROM `tabInterview Feedback`
-            ORDER BY creation DESC
-        """, as_dict=True)
-        
+
+        # ---------------------------------------------------------
+        # SITE HR OWNER FILTER
+        # ---------------------------------------------------------
+        if is_site_hr_user():
+
+            feedback_list = frappe.db.sql(
+                """
+                SELECT
+                    name,
+                    interview,
+                    interviewer,
+                    result,
+                    feedback,
+                    creation,
+                    modified
+                FROM `tabInterview Feedback`
+                WHERE owner = %s
+                ORDER BY creation DESC
+                """,
+                (frappe.session.user,),
+                as_dict=True
+            )
+
+        else:
+
+            feedback_list = frappe.db.sql("""
+                SELECT
+                    name,
+                    interview,
+                    interviewer,
+                    result,
+                    feedback,
+                    creation,
+                    modified
+                FROM `tabInterview Feedback`
+                ORDER BY creation DESC
+            """, as_dict=True)
+
         result = []
+
         for feedback in feedback_list:
+
             try:
+
                 feedback_data = {
                     "name": feedback.name,
                     "interview": feedback.interview,
@@ -821,86 +1345,172 @@ def get_candidate_feedback_list():
                     "creation": str(feedback.creation),
                     "modified": str(feedback.modified),
                 }
-                
+
                 # Get interview details
                 try:
-                    interview_data = frappe.db.sql("""
-                        SELECT job_applicant, job_opening, interview_round
+
+                    interview_data = frappe.db.sql(
+                        """
+                        SELECT
+                            job_applicant,
+                            job_opening,
+                            interview_round
                         FROM `tabInterview`
                         WHERE name = %s
-                    """, feedback.interview, as_dict=True)
-                    
+                        """,
+                        feedback.interview,
+                        as_dict=True
+                    )
+
                     if interview_data and len(interview_data) > 0:
+
                         interview = interview_data[0]
-                        feedback_data["interview_round"] = interview.get("interview_round")
-                        
+
+                        feedback_data["interview_round"] = (
+                            interview.get("interview_round")
+                        )
+
                         if interview.get("job_applicant"):
-                            applicant_data = frappe.db.sql("""
-                                SELECT applicant_name, email_id, country
+
+                            applicant_data = frappe.db.sql(
+                                """
+                                SELECT
+                                    applicant_name,
+                                    email_id,
+                                    country
                                 FROM `tabJob Applicant`
                                 WHERE name = %s
-                            """, interview["job_applicant"], as_dict=True)
-                            
+                                """,
+                                interview["job_applicant"],
+                                as_dict=True
+                            )
+
                             if applicant_data:
-                                feedback_data["applicant"] = applicant_data[0]
-                        
+                                feedback_data["applicant"] = (
+                                    applicant_data[0]
+                                )
+
                         if interview.get("job_opening"):
-                            job_data = frappe.db.sql("""
-                                SELECT job_title, location
+
+                            job_data = frappe.db.sql(
+                                """
+                                SELECT
+                                    job_title,
+                                    location
                                 FROM `tabJob Opening`
                                 WHERE name = %s
-                            """, interview["job_opening"], as_dict=True)
-                            
+                                """,
+                                interview["job_opening"],
+                                as_dict=True
+                            )
+
                             if job_data:
-                                feedback_data["job_opening"] = job_data[0]
+                                feedback_data["job_opening"] = (
+                                    job_data[0]
+                                )
+
                 except:
                     pass
-                
+
                 result.append(feedback_data)
+
             except:
                 continue
-        
-        return {"message": "Success", "data": result, "count": len(result)}
+
+        return {
+            "message": "Success",
+            "data": result,
+            "count": len(result)
+        }
+
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Candidate Feedback List Failed")
-        return {"message": f"Error: {str(e)}", "data": [], "count": 0}
-        
+
+        frappe.log_error(
+            frappe.get_traceback(),
+            "Candidate Feedback List Failed"
+        )
+
+        return {
+            "message": f"Error: {str(e)}",
+            "data": [],
+            "count": 0
+        }
+
 
 @frappe.whitelist()
 def check_existing_feedback(interview):
     """Check if feedback already exists for this interview"""
-    existing = frappe.db.exists("Interview Feedback", {"interview": interview})
-    
+
+    # IMPORTANT:
+    # Keep this GLOBAL.
+    # This is duplicate validation and must not be owner filtered.
+    existing = frappe.db.exists(
+        "Interview Feedback",
+        {
+            "interview": interview
+        }
+    )
+
     if existing:
+
         return {
             "exists": True,
             "feedback_name": existing
         }
-    
+
     return {
         "exists": False,
         "feedback_name": None
     }
-    
+
+
 @frappe.whitelist(allow_guest=True)
 def get_candidate_interviews(candidate_id):
     """Get all interviews for a specific candidate - useful when coming from rejected candidate"""
     try:
+
         if not candidate_id:
-            return {"message": "No candidate ID provided", "data": []}
-        
-        # Fetch ALL interviews for this candidate (no status filter)
+            return {
+                "message": "No candidate ID provided",
+                "data": []
+            }
+
+        # ---------------------------------------------------------
+        # SITE HR OWNER CHECK FOR CANDIDATE
+        # ---------------------------------------------------------
+        _check_site_hr_owner(
+            "Job Applicant",
+            candidate_id,
+            _("You can access only your own Job Applicant.")
+        )
+
+        # Fetch ALL interviews for this candidate
+        interview_filters = {
+            "job_applicant": candidate_id
+        }
+
+        # Site HR sees only interviews created by themselves
+        if is_site_hr_user():
+            interview_filters["owner"] = frappe.session.user
+
         interviews = frappe.get_all(
             "Interview",
-            filters={"job_applicant": candidate_id},
+            filters=interview_filters,
             fields=["name"],
             order_by="scheduled_on desc"
         )
-        
+
         result = []
+
         for interview_name in interviews:
+
             try:
-                doc = frappe.get_doc("Interview", interview_name.name)
+
+                doc = frappe.get_doc(
+                    "Interview",
+                    interview_name.name
+                )
+
                 interview_data = {
                     "name": doc.name,
                     "job_applicant": doc.get("job_applicant"),
@@ -909,34 +1519,65 @@ def get_candidate_interviews(candidate_id):
                     "status": doc.get("status"),
                     "interviewer": None
                 }
-                
+
                 # Get interviewer
                 try:
+
                     interviewer_details = frappe.db.get_all(
                         "Interview Detail",
                         filters={"parent": doc.name},
                         fields=["interviewer"],
                         limit=1
                     )
-                    
-                    if interviewer_details and len(interviewer_details) > 0:
-                        interview_data["interviewer"] = interviewer_details[0].get("interviewer")
+
+                    if (
+                        interviewer_details
+                        and len(interviewer_details) > 0
+                    ):
+
+                        interview_data["interviewer"] = (
+                            interviewer_details[0].get(
+                                "interviewer"
+                            )
+                        )
+
                 except:
                     pass
-                
+
                 # Get applicant name
                 try:
-                    applicant = frappe.get_doc("Job Applicant", candidate_id)
-                    interview_data["applicant_name"] = applicant.applicant_name
+
+                    applicant = frappe.get_doc(
+                        "Job Applicant",
+                        candidate_id
+                    )
+
+                    interview_data["applicant_name"] = (
+                        applicant.applicant_name
+                    )
+
                 except:
                     pass
-                
+
                 result.append(interview_data)
+
             except:
                 continue
-        
-        return {"message": "Success", "data": result}
-        
+
+        return {
+            "message": "Success",
+            "data": result
+        }
+
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Get Candidate Interviews Failed")
-        return {"message": f"Error: {str(e)}", "data": []}    
+
+        frappe.log_error(
+            frappe.get_traceback(),
+            "Get Candidate Interviews Failed"
+        )
+
+        return {
+            "message": f"Error: {str(e)}",
+            "data": []
+        }
+        

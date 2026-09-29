@@ -4,6 +4,7 @@
 # import frappe
 # from frappe import _
 # from frappe.utils.password import get_decrypted_password
+# import re
 
 # from resume.api.parse_guards import (
 #     applicant_exists_for_job,
@@ -65,6 +66,58 @@
 #         "degree":           degree,
 #         "institution":      institution,
 #     }
+
+
+
+# def clean_phone_numbers(phone):
+#     if not phone:
+#         return "", ""
+
+#     if isinstance(phone, list):
+#         normalized = []
+
+#         for p in phone:
+#             if isinstance(p, dict):
+#                 normalized.append(
+#                     str(
+#                         p.get("phone")
+#                         or p.get("number")
+#                         or p.get("value")
+#                         or ""
+#                     )
+#                 )
+#             else:
+#                 normalized.append(str(p or ""))
+
+#         phone = ",".join(normalized)
+
+#     numbers = re.split(r"[,\n;/]+", str(phone))
+
+#     valid_numbers = []
+
+#     for num in numbers:
+#         num = num.strip()
+
+#         num = re.sub(r"[^\d+]", "", num)
+
+#         if len(re.sub(r"\D", "", num)) >= 10:
+#             if num not in valid_numbers:
+#                 valid_numbers.append(num)
+
+#     first_number = valid_numbers[0] if valid_numbers else ""
+#     remaining_numbers = ", ".join(valid_numbers[1:]) if len(valid_numbers) > 1 else ""
+
+#     return first_number, remaining_numbers
+
+
+# def _normalize_scalar(value):
+#     if value is None:
+#         return ""
+
+#     if isinstance(value, (list, dict)):
+#         return json.dumps(value)
+
+#     return str(value)
 
 
 # # ---------------------------------------------------------------------------
@@ -130,6 +183,10 @@
 #     for file_storage in files:
 #         filename_orig = getattr(file_storage, "filename", None) or "uploaded_file"
 #         total_files  += 1
+#         frappe.log_error(
+#              f"Processing {filename_orig}",
+#              "Resume Upload Debug"
+#              )
 
 #         # Save file
 #         try:
@@ -144,6 +201,10 @@
 #                 "content": file_content, "is_private": 1,
 #             })
 #             saved_file.insert(ignore_permissions=True)
+#             frappe.log_error(
+#     f"Saved {filename_orig}",
+#     "Resume Upload Debug"
+# )
 #             file_url  = saved_file.file_url
 #             file_path = saved_file.get_full_path()
 #         except Exception as e:
@@ -254,14 +315,21 @@
 #             fit_level = ""
 
 #         # Insert Job Applicant
-#         try:
+#         try:    
+#             clean_phone, other_phones = clean_phone_numbers(
+#            applicant_data.get("phone_number")
+#            or applicant_data.get("phone")
+#             or ""
+#     )
 #             applicant_doc = {
 #                 "doctype": "Job Applicant",
 #                 "applicant_name":          applicant_name,
 #                 "email_id":                email_value,
 #                 "resume_attachment":       file_url,
 #                 "status":                  "Open",
-#                 "phone_number":            applicant_data.get("phone_number") or applicant_data.get("phone") or "",
+#                 # "phone_number":            applicant_data.get("phone_number") or applicant_data.get("phone") or "",
+#                 "phone_number": _normalize_scalar(clean_phone),
+#                 "custom_phone_number_2": _normalize_scalar(other_phones),
 #                 "applicant_rating":        applicant_data.get("applicant_rating") or applicant_data.get("rating") or 0,
 #                 "score":                   applicant_data.get("score"),
 #                 "fit_level":               fit_level,
@@ -377,8 +445,6 @@
 #         frappe.log_error(message=str(log_err), title="Resume Import Log creation failed")
 
 #     return {"message": f"{created} Job Applicant(s) created."}
-
-
 
 
 
@@ -515,6 +581,12 @@ def upload_and_process(job_opening=None):
         frappe.local.flags.ignore_csrf = True
     except Exception:
         pass
+
+    # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+    # Ye function "Job Applicant" records create karta hai, isliye create permission check kiya.
+    if not frappe.has_permission("Job Applicant", ptype="create"):
+        frappe.logger().error(f"Permission denied for user {frappe.session.user} to create Job Applicant")
+        frappe.throw(_("You do not have permission to upload resumes / create Job Applicants"))
 
     if not job_opening:
         job_opening = frappe.form_dict.get("job_opening")
@@ -694,6 +766,14 @@ def upload_and_process(job_opening=None):
         applicant_data["experience_years"] = calculate_experience_years(applicant_data.get("experience", []))
         flat_data = flatten_resume_data(applicant_data)
 
+        if is_data_bank:
+            applicant_data["justification_by_ai"] = ""
+            applicant_data["fit_level"] = ""
+            applicant_data["applicant_rating"] = 0
+            applicant_data["rating"] = 0
+            applicant_data["score"] = None
+
+
         allowed_fit_levels = ["", "Strong Fit", "Moderate Fit", "Weak Fit"]
         fit_level = applicant_data.get("fit_level", "")
         if fit_level not in allowed_fit_levels:
@@ -719,6 +799,7 @@ def upload_and_process(job_opening=None):
                 "score":                   applicant_data.get("score"),
                 "fit_level":               fit_level,
                 "justification_by_ai":     applicant_data.get("justification_by_ai", ""),
+                # "justification_by_ai":     "" if is_data_bank else applicant_data.get("justification_by_ai", ""),
                 "custom_parsed_json":      json.dumps(applicant_data),
                 "custom_parse_status":     "Parsed",
                 "custom_experience_years": flat_data["experience_years"],
@@ -737,7 +818,7 @@ def upload_and_process(job_opening=None):
                 applicant_doc["job_title"] = job_opening
 
             applicant = frappe.get_doc(applicant_doc)
-            applicant.insert(ignore_permissions=True)
+            applicant.insert(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi Job Applicant create permission check kare (double-safety)
             created += 1
 
             # Link file to applicant

@@ -1,4 +1,3 @@
-
 import frappe
 from frappe import _
 
@@ -106,7 +105,7 @@ def get_appointment_letter_template_details(template_name):
         }
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Appointment Letter record create karta hai
 def create_appointment_letter(data):
     """Create a new appointment letter"""
     try:
@@ -142,6 +141,11 @@ def create_appointment_letter(data):
 
         if not data.get("appointment_letter_template"):
             return {"success": False, "message": _("Template is required")}
+
+        # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+        # Ye Appointment Letter doctype ka naya record create karta hai.
+        if not frappe.has_permission("Appointment Letter", ptype="create"):
+            return {"success": False, "message": _("You do not have permission to create Appointment Letter")}
 
         # ✅ Validate Employee exists in Frappe
         if not frappe.db.exists("Employee", data.get("custom_employee")):
@@ -181,6 +185,7 @@ def create_appointment_letter(data):
             "custom_monthly_gross_salary": data.get("custom_monthly_gross_salary", ""),
             "custom_employee": data.get("custom_employee") or "",
             "custom_salary_annexure": data.get("custom_salary_annexure") or "",
+            "custom_branch": data.get("custom_branch") or "",
         })
 
         # Add terms
@@ -196,7 +201,7 @@ def create_appointment_letter(data):
                     "description": term.get("description", "")
                 })
 
-        appointment.insert(ignore_permissions=True)
+        appointment.insert(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
 
         # ✅ Fetch custom_staffworker from Employee at creation time too
@@ -222,6 +227,7 @@ def create_appointment_letter(data):
                 "custom_monthly_gross_salary": data.get("custom_monthly_gross_salary", ""),
                 "custom_employee": data.get("custom_employee") or "",
                 "custom_salary_annexure": data.get("custom_salary_annexure") or "",
+                "custom_branch": data.get("custom_branch") or "",
                 "custom_staffworker": custom_staffworker,  
                 "owner": appointment.owner or "",
             }
@@ -291,6 +297,7 @@ def get_appointment_letter_details(appointment_letter_name):
                 "status": letter.status if hasattr(letter, 'status') else '',
                 "custom_employee": letter.custom_employee if hasattr(letter, 'custom_employee') else '',
                 "custom_salary_annexure": letter.custom_salary_annexure if hasattr(letter, 'custom_salary_annexure') else '',
+                "custom_branch": letter.custom_branch if hasattr(letter, 'custom_branch') else '',
             }
         }
     except Exception as e:
@@ -349,7 +356,7 @@ def get_appointment_letter_by_job_applicant(job_applicant):
         al_custom = frappe.db.get_value(
             "Appointment Letter",
             letter.name,
-            ["custom_employee", "custom_salary_annexure", "owner"],
+            ["custom_employee", "custom_salary_annexure","custom_branch", "owner"],
             as_dict=True
         ) or {}
 
@@ -376,6 +383,7 @@ def get_appointment_letter_by_job_applicant(job_applicant):
                 "status": letter.status if hasattr(letter, 'status') else '',
                 "custom_employee": custom_employee,
                 "custom_salary_annexure": al_custom.get("custom_salary_annexure") or "",
+                "custom_branch": al_custom.get("custom_branch") or "",
                 "custom_staffworker": custom_staffworker,  # ✅ from Employee doc
                 "owner": al_custom.get("owner") or letter.owner or "", 
             }

@@ -136,6 +136,18 @@ app_license = "mit"
 # 	"Event": "frappe.desk.doctype.event.event.has_permission",
 # }
 
+# Permissions
+# -----------
+# Permissions evaluated in scripted ways
+
+permission_query_conditions = {
+    "Job Opening": "resume.api.permissions.job_opening_query",
+    "Job Applicant": "resume.api.permissions.job_applicant_query",
+    "Interview": "resume.api.permissions.interview_query",
+    "Interview Feedback": "resume.api.permissions.interview_feedback_query",
+    "Applicant Document": "resume.api.permissions.applicant_document_query",
+}
+
 # DocType Class
 # ---------------
 # Override standard doctype classes

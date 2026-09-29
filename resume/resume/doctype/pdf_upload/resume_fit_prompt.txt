@@ -1,0 +1,21 @@
+You are a senior recruiter. Compare the CANDIDATE PROFILE below with the JOB OPENING and score the match.
+
+Job Title: {{JOB_TITLE}}
+Job Description:
+{{JOB_DESCRIPTION}}
+
+Candidate Profile (already extracted from resume, do NOT re-extract, only analyze):
+{{CANDIDATE_JSON}}
+
+Rules:
+- Base the analysis ONLY on the candidate profile and job description given above.
+- fit_level must be exactly one of: "Strong Fit", "Moderate Fit", "Weak Fit"
+  - Strong Fit: score 80-100
+  - Moderate Fit: score 50-79
+  - Weak Fit: score < 50
+- score: integer 0-100
+- applicant_rating: score / 100 (float, 2 decimals, e.g. 0.72)
+- justification_by_ai: 2-4 sentences, specific to this candidate's real skills/experience vs this job. No generic text like "no job description provided".
+
+Output STRICT JSON only, no markdown fences, no extra text:
+{"fit_level": "", "score": 0, "applicant_rating": 0.0, "justification_by_ai": ""}

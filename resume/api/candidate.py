@@ -1,6 +1,11 @@
+# 2
 import frappe
 from datetime import datetime
 import json
+from frappe.utils import strip_html
+from frappe.utils.password import get_decrypted_password
+import google.generativeai as genai
+from resume.resume.doctype.pdf_upload.pdf_upload import _call_gemini_with_retry
 
 # Define recruitment stages - UPDATED WITH JOINING CONFIRMATION
 RECRUITMENT_STAGES = [
@@ -332,7 +337,7 @@ def get_candidate_details(candidate_id):
         frappe.throw(f"Failed to fetch candidate details: {str(e)}")
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Job Applicant ko write/update karta hai
 def update_stage_status():
     """Update stage status for a candidate"""
     data = frappe.form_dict
@@ -351,6 +356,11 @@ def update_stage_status():
     
     if not status:
         frappe.throw("Status is required")
+
+    # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+    # Ye Job Applicant doctype ko write/update karta hai.
+    if not frappe.has_permission("Job Applicant", ptype="write", doc=candidate_id):
+        frappe.throw("You do not have permission to update this candidate's stage")
 
     try:
         # Validate stage_id
@@ -373,7 +383,7 @@ def update_stage_status():
         else:
             candidate_doc.notes = stage_note
         
-        candidate_doc.save(ignore_permissions=True)
+        candidate_doc.save(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
         
         frappe.log(f"Updated stage {stage_id} for candidate {candidate_id}: {status}")
@@ -488,7 +498,7 @@ def get_candidates_by_stage(stage_id, status=None):
         frappe.throw(f"Failed to fetch candidates: {str(e)}")
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Job Applicant ko write/update karta hai
 def advance_candidate_to_next_stage():
     """Automatically advance candidate to the next stage after completing current stage"""
     data = frappe.form_dict
@@ -502,6 +512,11 @@ def advance_candidate_to_next_stage():
     
     if not current_stage_id:
         frappe.throw("Current stage ID is required")
+
+    # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+    # Ye Job Applicant doctype ko write/update karta hai.
+    if not frappe.has_permission("Job Applicant", ptype="write", doc=candidate_id):
+        frappe.throw("You do not have permission to advance this candidate's stage")
 
     try:
         # Find current stage index
@@ -535,7 +550,7 @@ def advance_candidate_to_next_stage():
         else:
             candidate_doc.notes = stage_note
         
-        candidate_doc.save(ignore_permissions=True)
+        candidate_doc.save(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
         
         frappe.log(f"Advanced candidate {candidate_id} to stage: {next_stage['label']}")
@@ -608,91 +623,6 @@ def get_recruitment_pipeline():
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Pipeline Fetch Failed")
         frappe.throw(f"Failed to fetch recruitment pipeline: {str(e)}")
-        
-
-# @frappe.whitelist()
-# def update_joining_confirmation():
-#     """
-#     Update joining confirmation status for a candidate
-#     status_type: 'join', 'not_join', or 'offer_revoked'
-#     """
-#     try:
-#         # Try to get JSON data first
-#         data = frappe.local.form_dict
-        
-#         candidate_id = data.get('candidate_id')
-#         status_type = data.get('status_type')
-        
-#         frappe.logger().info(f"=== UPDATE JOINING CONFIRMATION ===")
-#         frappe.logger().info(f"Candidate ID: {candidate_id}")
-#         frappe.logger().info(f"Status Type: {status_type}")
-#         frappe.logger().info(f"Full form dict: {frappe.local.form_dict}")
-        
-#         if not candidate_id:
-#             return {
-#                 "success": False,
-#                 "message": "Candidate ID is required"
-#             }
-        
-#         if status_type not in ['join', 'not_join', 'offer_revoked']:
-#             return {
-#                 "success": False,
-#                 "message": "Invalid status type. Must be: join, not_join, or offer_revoked"
-#             }
-        
-#         # Check if a Joining Confirmation record already exists
-#         existing_records = frappe.get_all(
-#             "Joining Confirmation",
-#             filters={"candidate_id": candidate_id},
-#             fields=["name"]
-#         )
-        
-#         if existing_records:
-#             # Update existing record
-#             frappe.logger().info(f"Updating existing record: {existing_records[0].name}")
-#             doc = frappe.get_doc("Joining Confirmation", existing_records[0].name)
-#         else:
-#             # Create new record
-#             frappe.logger().info("Creating new record")
-#             doc = frappe.new_doc("Joining Confirmation")
-#             doc.candidate_id = candidate_id
-        
-#         # Reset all statuses
-#         doc.join = 0
-#         doc.not_join = 0
-#         doc.offer_revoked = 0
-        
-#         # Set the selected status
-#         setattr(doc, status_type, 1)
-#         frappe.logger().info(f"Setting {status_type} = 1")
-        
-#         # Save the document
-#         doc.save(ignore_permissions=True)
-#         frappe.db.commit()
-        
-#         frappe.logger().info("=== SUCCESS ===")
-        
-#         return {
-#             "success": True,
-#             "message": f"Joining confirmation updated: {status_type.replace('_', ' ').title()}",
-#             "data": {
-#                 "candidate_id": candidate_id,
-#                 "status": status_type
-#             }
-#         }
-        
-#     except Exception as e:
-#         frappe.logger().error(f"=== ERROR ===")
-#         frappe.logger().error(f"Error: {str(e)}")
-#         frappe.logger().error(f"Traceback: {frappe.get_traceback()}")
-        
-#         frappe.log_error(f"Error updating joining confirmation: {str(e)}")
-#         frappe.db.rollback()
-        
-#         return {
-#             "success": False,
-#             "message": f"Failed to update joining confirmation: {str(e)}"
-#         }
 
 
 @frappe.whitelist()
@@ -700,6 +630,11 @@ def update_joining_confirmation():
     """
     Update joining confirmation status for a candidate
     status_type: 'join', 'not_join', or 'offer_revoked'
+
+    NOTE: When status_type == 'join', the Date of Joining is auto-fetched
+    from the linked Job Offer's `custom_joining_date` field (one-time copy).
+    The HR user can still edit it afterwards via update_joining_date() —
+    editing here does NOT change the original Job Offer record.
     """
     try:
         # Try to get JSON data first
@@ -731,6 +666,15 @@ def update_joining_confirmation():
             filters={"candidate_id": candidate_id},
             fields=["name"]
         )
+
+        # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+        # Agar record already exist karta hai toh "write" chahiye, warna "create" chahiye.
+        required_ptype = "write" if existing_records else "create"
+        if not frappe.has_permission("Joining Confirmation", ptype=required_ptype):
+            return {
+                "success": False,
+                "message": "You do not have permission to update joining confirmation"
+            }
         
         if existing_records:
             # Update existing record
@@ -751,13 +695,30 @@ def update_joining_confirmation():
         setattr(doc, status_type, 1)
         frappe.logger().info(f"Setting {status_type} = 1")
         
+        # NEW: Auto-fetch Joining Date from Job Offer when candidate is joining.
+        # Only auto-fill if the field is currently empty, so we never overwrite
+        # a date the HR user has already manually edited.
+        if status_type == 'join' and not doc.custom_date_of_joining:
+            offer_joining_date = frappe.db.get_value(
+                "Job Offer",
+                {"job_applicant": candidate_id},
+                "custom_joining_date"
+            )
+            if offer_joining_date:
+                doc.custom_date_of_joining = offer_joining_date
+                frappe.logger().info(
+                    f"Auto-set custom_date_of_joining from Job Offer: {offer_joining_date}"
+                )
+            else:
+                frappe.logger().info("No Job Offer joining date found to auto-fill")
+        
         # Clear date of joining if candidate is not joining or offer revoked
         if status_type in ['not_join', 'offer_revoked']:
             doc.custom_date_of_joining = None
             frappe.logger().info(f"Clearing custom_date_of_joining because status_type = {status_type}")
         
         # Save the document
-        doc.save(ignore_permissions=True)
+        doc.save(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
         
         frappe.logger().info("=== SUCCESS ===")
@@ -767,7 +728,8 @@ def update_joining_confirmation():
             "message": f"Joining confirmation updated: {status_type.replace('_', ' ').title()}",
             "data": {
                 "candidate_id": candidate_id,
-                "status": status_type
+                "status": status_type,
+                "date_of_joining": doc.custom_date_of_joining
             }
         }
         
@@ -784,6 +746,7 @@ def update_joining_confirmation():
             "message": f"Failed to update joining confirmation: {str(e)}"
         }
 
+
 @frappe.whitelist()
 def update_candidate_field():
     """Update a single field on Job Applicant"""
@@ -792,6 +755,12 @@ def update_candidate_field():
         candidate_id = data.get('candidate_id')
         fieldname = data.get('fieldname')
         value = data.get('value')
+
+        # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+        # frappe.db.set_value neeche seedha DB write karta hai aur permission engine ko
+        # bypass kar deta hai, isliye yaha explicit check zaroori hai.
+        if not frappe.has_permission("Job Applicant", ptype="write", doc=candidate_id):
+            return {"success": False, "message": "You do not have permission to update this candidate"}
         
         frappe.db.set_value('Job Applicant', candidate_id, fieldname, value)
         frappe.db.commit()
@@ -804,7 +773,15 @@ def update_candidate_field():
 
 @frappe.whitelist()
 def update_joining_date():
-    """Update custom_date_of_joining field on Joining Confirmation record for a candidate"""
+    """
+    Update custom_date_of_joining field on Joining Confirmation record for a candidate.
+
+    This is called when the HR user manually edits the Date of Joining input
+    on the Candidates page. This ONLY updates the Joining Confirmation record —
+    it intentionally does NOT touch the original Job Offer.custom_joining_date,
+    since that represents the originally offered date and should stay as a
+    historical reference.
+    """
     try:
         data = frappe.local.form_dict
         candidate_id = data.get('candidate_id')
@@ -819,6 +796,11 @@ def update_joining_date():
             fields=["name"]
         )
 
+        # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+        required_ptype = "write" if existing_records else "create"
+        if not frappe.has_permission("Joining Confirmation", ptype=required_ptype):
+            return {"success": False, "message": "You do not have permission to update the date of joining"}
+
         if existing_records:
             doc = frappe.get_doc("Joining Confirmation", existing_records[0].name)
         else:
@@ -826,11 +808,180 @@ def update_joining_date():
             doc.candidate_id = candidate_id
 
         doc.custom_date_of_joining = date_of_joining
-        doc.save(ignore_permissions=True)
+        doc.save(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
 
         return {"success": True, "message": "Date of joining updated successfully", "data": {"date_of_joining": date_of_joining}}
     except Exception as e:
         frappe.log_error(str(e))
         frappe.db.rollback()
-        return {"success": False, "message": str(e)}    
+        return {"success": False, "message": str(e)}
+
+def _load_fit_prompt():
+    path = frappe.get_app_path(
+        "resume", "resume", "doctype", "pdf_upload", "resume_fit_prompt.txt"
+    )
+    with open(path, "r") as f:
+        return f.read()
+
+
+@frappe.whitelist()
+def analyze_fit_for_job():
+    """Job Opening select hone par candidate ka fit-analysis (score/rating/justification) chalata hai.
+    Poora resume dobara extract nahi karta — sirf custom_parsed_json se profile leke
+    job description ke against Gemini se compare karwata hai, aur result
+    custom_parsed_json ke andar + Job Applicant ki asal fields dono mein save karta hai.
+    """
+    data = frappe.local.form_dict
+    candidate_id = data.get("candidate_id")
+    job_opening = data.get("job_opening")
+
+    if not candidate_id or not job_opening:
+        return {"success": False, "message": "candidate_id and job_opening are required."}
+
+    # NEW: Permission check — is file ke baaki functions jaisa hi pattern
+    if not frappe.has_permission("Job Applicant", ptype="write", doc=candidate_id):
+        return {"success": False, "message": "You do not have permission to update this candidate."}
+
+    try:
+        applicant = frappe.get_doc("Job Applicant", candidate_id)
+        parsed_raw = applicant.get("custom_parsed_json")
+        if not parsed_raw:
+            return {"success": False, "message": "No parsed resume data found for this candidate."}
+
+        try:
+            parsed = json.loads(parsed_raw)
+        except Exception:
+            return {"success": False, "message": "Could not read parsed resume data."}
+
+        job_doc = frappe.get_doc("Job Opening", job_opening)
+        job_title = job_doc.get("job_title") or job_opening
+        job_description = strip_html(job_doc.get("description") or "")[:3000]
+
+        # Poora resume dobara nahi bhejna — sirf relevant fields
+        candidate_summary = {
+            "skills": parsed.get("skills"),
+            "experience": parsed.get("experience"),
+            "education": parsed.get("education"),
+            "certifications": parsed.get("certifications"),
+            "custom_total_experience": parsed.get("custom_total_experience"),
+            "custom_current_company": parsed.get("custom_current_company"),
+            "location": parsed.get("location"),
+        }
+
+        api_key = (
+            frappe.utils.password.get_decrypted_password(
+                "ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False
+            )
+            or frappe.conf.get("gemini_api_key")
+        )
+        if not api_key:
+            return {"success": False, "message": "Gemini API key not configured."}
+
+        genai.configure(api_key=api_key)
+        prompt_template = _load_fit_prompt()
+        prompt = (
+            prompt_template
+            .replace("{{JOB_TITLE}}", job_title or "N/A")
+            .replace("{{JOB_DESCRIPTION}}", job_description or "N/A")
+            .replace("{{CANDIDATE_JSON}}", json.dumps(candidate_summary, ensure_ascii=False))
+        )
+
+        def _call():
+            model = genai.GenerativeModel("gemini-2.5-flash")
+            resp = model.generate_content(prompt)
+            t = resp.text.strip()
+            if t.startswith("```"):
+                t = t.replace("```json", "").replace("```", "").strip()
+            return json.loads(t)
+
+        result = _call_gemini_with_retry(_call)
+
+        allowed_fit_levels = ["Strong Fit", "Moderate Fit", "Weak Fit"]
+        fit_level = result.get("fit_level") if result.get("fit_level") in allowed_fit_levels else ""
+        score = result.get("score")
+        if score is None:
+            score = 0
+        rating = result.get("applicant_rating")
+        justification = result.get("justification_by_ai", "")
+
+        # ── custom_parsed_json ke andar bhi update ──
+        parsed["fit_level"] = fit_level
+        parsed["score"] = score
+        parsed["applicant_rating"] = rating
+        parsed["justification_by_ai"] = justification
+
+        # ── Job Applicant doctype ki asal fields + custom_parsed_json dono save ──
+        frappe.db.set_value(
+            "Job Applicant", candidate_id,
+            {
+                "fit_level": fit_level,
+                "score": score,
+                "applicant_rating": rating or 0,
+                "justification_by_ai": justification,
+                "custom_parsed_json": json.dumps(parsed),
+            },
+            update_modified=False,
+        )
+        frappe.db.commit()
+
+        return {
+            "success": True,
+            "fit_level": fit_level,
+            "score": score,
+            "applicant_rating": rating,
+            "justification_by_ai": justification,
+        }
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), f"analyze_fit_for_job failed: {candidate_id}")
+        frappe.db.rollback()
+        return {"success": False, "message": str(e)[:300]}
+
+@frappe.whitelist()
+def clear_fit_analysis():
+    """Job Opening hatane par purani AI scoring (fit/score/rating/justification) clear karta hai."""
+    data = frappe.local.form_dict
+    candidate_id = data.get("candidate_id")
+
+    if not candidate_id:
+        return {"success": False, "message": "candidate_id is required."}
+
+    if not frappe.has_permission("Job Applicant", ptype="write", doc=candidate_id):
+        return {"success": False, "message": "You do not have permission to update this candidate."}
+
+    try:
+        applicant = frappe.get_doc("Job Applicant", candidate_id)
+        parsed_raw = applicant.get("custom_parsed_json")
+
+        if parsed_raw:
+            try:
+                parsed = json.loads(parsed_raw)
+                parsed["fit_level"] = ""
+                parsed["score"] = 0
+                parsed["applicant_rating"] = 0
+                parsed["justification_by_ai"] = ""
+                parsed_json_str = json.dumps(parsed)
+            except Exception:
+                parsed_json_str = parsed_raw
+        else:
+            parsed_json_str = parsed_raw
+
+        update_values = {
+            "fit_level": "",
+            "score": 0,
+            "applicant_rating": 0,
+            "justification_by_ai": "",
+        }
+        if parsed_raw:
+            update_values["custom_parsed_json"] = parsed_json_str
+
+        frappe.db.set_value("Job Applicant", candidate_id, update_values, update_modified=False)
+        frappe.db.commit()
+
+        return {"success": True}
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), f"clear_fit_analysis failed: {candidate_id}")
+        frappe.db.rollback()
+        return {"success": False, "message": str(e)[:300]}    
+
