@@ -1,5 +1,5 @@
-# 2
 import frappe
+import frappe.share  # NEW: share feature ke liye
 from datetime import datetime
 import json
 from frappe.utils import strip_html
@@ -985,3 +985,252 @@ def clear_fit_analysis():
         frappe.db.rollback()
         return {"success": False, "message": str(e)[:300]}    
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NEW: SHARE CANDIDATE (Job Applicant) — Frappe "Share" dialog jaisa feature
+# Frappe ke built-in DocShare + frappe.share module use hota hai, isliye
+# Desk ke Share dialog aur humari UI dono ek hi data dekhte hain.
+# Dropdown ke liye users ki list `resume.api.job_opening.get_share_users` se aati hai.
+# ═════════════════════════════════════════════════════════════════════════════
+CANDIDATE_SHARE_DOCTYPE = "Job Applicant"
+
+
+def _share_flag(value):
+    """'1' / 'true' / 1 / True  ->  1, baaki sab -> 0"""
+    return 1 if str(value).strip().lower() in ("1", "true") else 0
+
+
+# def _can_share_candidate(name):
+#     """
+#     Abhi: jis user ko Job Applicant par 'share' permission hai wahi share kar sakta hai
+#     (Frappe Desk jaisa). Rule badalna ho to sirf yahi function badalna.
+#     """
+#     return frappe.has_permission(CANDIDATE_SHARE_DOCTYPE, ptype="share", doc=name)
+def _can_share_candidate(name):
+    if frappe.session.user == "Administrator":
+        return True
+
+    if _is_candidate_share_recipient(name):
+        return bool(frappe.db.get_value(
+            "DocShare",
+            {"share_doctype": CANDIDATE_SHARE_DOCTYPE, "share_name": name,
+             "user": frappe.session.user, "everyone": 0},
+            "share",
+        ))
+
+    return bool(frappe.has_permission(CANDIDATE_SHARE_DOCTYPE, ptype="read", doc=name))
+
+
+
+
+def _is_candidate_share_recipient(name):
+    """
+    True agar current user ko ye candidate kisi ne SHARE kiya hai (uske naam ki DocShare row hai).
+    False agar candidate user ne khud banaya hai / use share nahi hua.
+    """
+    return bool(
+        frappe.db.exists(
+            "DocShare",
+            {
+                "share_doctype": CANDIDATE_SHARE_DOCTYPE,
+                "share_name": name,
+                "user": frappe.session.user,
+                "everyone": 0,
+            },
+        )
+    )
+
+
+# def _candidate_share_access(name):
+#     """
+#     can_share      -> Share permission hai? Nahi hai to button disabled.
+#     can_view_list  -> "Currently shared with" dikhegi (jise share permission hai usse hamesha).
+#     only_mine      -> True agar user ko ye candidate kisi ne share kiya hai: tab list mein SIRF
+#                       wahi users aate hain jinko usne khud share kiya hai. False (owner/sharer)
+#                       ko poori list dikhti hai.
+#     """
+#     can_share = bool(_can_share_candidate(name))
+#     only_mine = can_share and _is_candidate_share_recipient(name)
+#     return {"can_share": can_share, "can_view_list": can_share, "only_mine": bool(only_mine)}
+def _candidate_share_access(name):
+    is_recipient = _is_candidate_share_recipient(name)
+    can_share = bool(_can_share_candidate(name))
+    return {
+        "can_share": can_share,
+        "can_view_list": can_share,
+        "only_mine": can_share and is_recipient,
+    }
+
+
+def _remove_candidate_share(name, user):
+    """
+    Ek user ka share hata deta hai (DocShare row delete) — Frappe Desk mein bhi
+    saari permissions uncheck karne par yehi hota hai.
+    frappe.share.remove()/delete_doc() DocShare par delete permission maangte hain jo
+    normal users ke role ko nahi hoti, isliye seedha DB se delete karte hain.
+    Security: _can_share_candidate() check set_candidate_share() mein pehle hi ho chuka hota hai.
+    """
+    frappe.db.delete(
+        "DocShare",
+        {"share_doctype": CANDIDATE_SHARE_DOCTYPE, "share_name": name, "user": user, "everyone": 0},
+    )
+    # Shared user ki permission cache saaf karo
+    frappe.clear_cache(user=user)
+    frappe.clear_document_cache(CANDIDATE_SHARE_DOCTYPE, name)
+
+
+def _get_candidate_shares(name, shared_by=None):
+    """
+    Is candidate ke user-wise shares (Everyone wali row chhodkar).
+    shared_by diya ho to sirf wahi shares jo us user ne banaye (DocShare ka owner = jisne share kiya).
+    """
+    filters = {"share_doctype": CANDIDATE_SHARE_DOCTYPE, "share_name": name, "everyone": 0}
+    if shared_by:
+        filters["owner"] = shared_by
+
+    shares = frappe.get_all(
+        "DocShare",
+        filters=filters,
+        fields=["user", "read", "write", "share", "submit"],
+        order_by="creation asc",
+        limit_page_length=0,
+    )
+
+    emails = [s.user for s in shares if s.user]
+    full_names = {}
+    if emails:
+        for u in frappe.get_all(
+            "User",
+            filters={"name": ["in", emails]},
+            fields=["name", "full_name"],
+            limit_page_length=0,
+        ):
+            full_names[u.name] = u.full_name
+
+    return [
+        {
+            "user": s.user,
+            "full_name": full_names.get(s.user) or s.user,
+            "read": int(s.read or 0),
+            "write": int(s.write or 0),
+            "share": int(s.share or 0),
+            "submit": int(s.submit or 0),
+        }
+        for s in shares
+    ]
+
+
+# def _visible_candidate_shares(name):
+#     """
+#     Current user ko jo shares dikhane hain:
+#     - Jise candidate share hua hai -> sirf wo jo usne khud share kiye
+#     - Baaki (owner / sharer)       -> sabhi
+#     """
+#     if _is_candidate_share_recipient(name):
+#         return _get_candidate_shares(name, shared_by=frappe.session.user)
+#     return _get_candidate_shares(name)  
+
+def _visible_candidate_shares(name):
+    if _is_candidate_share_recipient(name):
+        return _get_candidate_shares(name, shared_by=frappe.session.user)
+    return _get_candidate_shares(name)
+
+
+@frappe.whitelist()
+def get_candidate_share_access(name):
+    """Share button chalega ya disabled hoga (can_share) aur list kitni dikhani hai (only_mine)."""
+    try:
+        if not frappe.db.exists(CANDIDATE_SHARE_DOCTYPE, name):
+            return {"success": False, "can_share": False, "can_view_list": False, "only_mine": False, "message": "Candidate not found"}
+
+        return {"success": True, **_candidate_share_access(name)}
+
+    except Exception as e:
+        frappe.log_error(title="Get Candidate Share Access Error", message=frappe.get_traceback())
+        return {"success": False, "can_share": False, "can_view_list": False, "only_mine": False, "message": str(e)}
+
+
+@frappe.whitelist()
+def get_candidate_shares(name):
+    """Ye candidate abhi kin users ke saath share hai (permissions ke saath)."""
+    try:
+        if not frappe.db.exists(CANDIDATE_SHARE_DOCTYPE, name):
+            return {"success": False, "data": [], "message": "Candidate not found"}
+
+        if not frappe.has_permission(CANDIDATE_SHARE_DOCTYPE, ptype="read", doc=name):
+            return {"success": False, "data": [], "message": "You do not have permission to view this candidate"}
+
+        # Share permission nahi hai to list nahi; hai to _visible_candidate_shares ke hisaab se
+        access = _candidate_share_access(name)
+        if not access["can_view_list"]:
+            return {"success": True, "data": [], **access}
+
+        return {"success": True, "data": _visible_candidate_shares(name), **access}
+
+    except Exception as e:
+        frappe.log_error(title="Get Candidate Shares Error", message=frappe.get_traceback())
+        return {"success": False, "data": [], "message": str(e)}
+
+
+@frappe.whitelist()
+def set_candidate_share(name, user, read=0, write=0, share=0, submit=0):
+    """
+    Ek user ke liye candidate share add/update karta hai.
+    - Pehle se share hai   -> permissions update
+    - Naya user           -> add
+    - Saari permissions 0 -> share remove (Frappe Desk jaisa)
+    Response mein updated shares list wapas aati hai (jitni current user ko dikhani hai).
+    """
+    try:
+        if not frappe.db.exists(CANDIDATE_SHARE_DOCTYPE, name):
+            return {"success": False, "message": "Candidate not found"}
+
+        if not _can_share_candidate(name):
+            return {"success": False, "message": "You do not have permission to share this candidate"}
+
+        if not frappe.db.exists("User", {"name": user, "enabled": 1}):
+            return {"success": False, "message": "Selected user not found or disabled"}
+
+        # Agar ye user pehle se kisi AUR ne share kiya hua hai to jise candidate share hua hai
+        # wo use chhu nahi sakta (warna doosron ki permission badal/hata sakta tha).
+        # Apne diye hue share badal sakta hai.
+        if _is_candidate_share_recipient(name):
+            existing_owner = frappe.db.get_value(
+                "DocShare",
+                {"share_doctype": CANDIDATE_SHARE_DOCTYPE, "share_name": name, "user": user, "everyone": 0},
+                "owner",
+            )
+            if existing_owner and existing_owner != frappe.session.user:
+                return {"success": False, "message": "This user already has access to this candidate"}
+
+        read, write, share = _share_flag(read), _share_flag(write), _share_flag(share)
+        submit = 0  # Job Applicant submittable nahi hai, isliye hamesha 0
+
+        # Frappe UI jaisa rule: write ya share dena hai to read bhi chahiye
+        if write or share:
+            read = 1
+
+        if not (read or write or share):
+            # Saari permissions hata di -> user ka share hat jaata hai (Frappe jaisa)
+            _remove_candidate_share(name, user)
+        else:
+            frappe.share.add(
+                CANDIDATE_SHARE_DOCTYPE,
+                name,
+                user,
+                read=read,
+                write=write,
+                share=share,
+                notify=0,
+                # Role mein Share tick na ho tab bhi share ho sake (humara _can_share_candidate() check upar ho chuka hai)
+                flags={"ignore_share_permission": True},
+            )
+
+        frappe.db.commit()
+        return {"success": True, "data": _visible_candidate_shares(name)}
+
+    except Exception as e:
+        frappe.db.rollback()
+        frappe.log_error(title="Set Candidate Share Error", message=frappe.get_traceback())
+        return {"success": False, "message": str(e)}
+# ═════════════════════════════════════════════════════════════════════════════

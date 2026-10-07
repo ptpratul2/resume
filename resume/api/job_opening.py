@@ -1,4 +1,5 @@
 import frappe
+import frappe.share
 from datetime import datetime, timezone
 import json
 
@@ -315,6 +316,296 @@ def update_publish_on_website(name, publish_on_website):
         return {"success": False, "message": str(e)}
 # ─────────────────────────────────────────────────────────────────────────────
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NEW: SHARE JOB OPENING (Frappe "Share" dialog jaisa feature)
+# Frappe ke built-in DocShare + frappe.share module use hota hai, isliye
+# Desk ke Share dialog aur humari UI dono ek hi data dekhte hain.
+# ═════════════════════════════════════════════════════════════════════════════
+SHARE_DOCTYPE = "Job Opening"
+
+
+def _to_flag(value):
+    """'1' / 'true' / 1 / True  ->  1, baaki sab -> 0"""
+    return 1 if str(value).strip().lower() in ("1", "true") else 0
+
+
+# def _can_share(name):
+#     """
+#     Jis user ko Job Opening par 'share' permission hai wahi share kar sakta hai
+#     (role se ya kisi ke share karne par mili permission se — Frappe Desk jaisa).
+#     """
+#     return frappe.has_permission(SHARE_DOCTYPE, ptype="share", doc=name)
+def _can_share(name):
+    """
+    1. Administrator                         -> haan
+    2. Recipient (kisi ne share kiya hai)    -> sirf tab jab DocShare mein share = 1
+    3. Baaki (owner / koi bhi jo read kar sake) -> haan
+    """
+    if frappe.session.user == "Administrator":
+        return True
+
+    if _is_share_recipient(name):
+        # Role mein Share ho tab bhi ignore: sirf DocShare ka share flag chalega
+        return bool(frappe.db.get_value(
+            "DocShare",
+            {"share_doctype": SHARE_DOCTYPE, "share_name": name,
+             "user": frappe.session.user, "everyone": 0},
+            "share",
+        ))
+
+    return bool(frappe.has_permission(SHARE_DOCTYPE, ptype="read", doc=name))
+
+
+def _is_share_recipient(name):
+    """
+    True agar current user ko ye Job Opening kisi ne SHARE ki hai (uske naam ki DocShare row hai).
+    False agar opening user ne khud banayi hai / use share nahi hui.
+    """
+    return bool(
+        frappe.db.exists(
+            "DocShare",
+            {
+                "share_doctype": SHARE_DOCTYPE,
+                "share_name": name,
+                "user": frappe.session.user,
+                "everyone": 0,
+            },
+        )
+    )
+
+
+# def _share_access(name):
+#     """
+#     can_share      -> Share permission hai? Nahi hai to button disabled.
+#     can_view_list  -> "Currently shared with" dikhegi (jise share permission hai usse hamesha).
+#     only_mine      -> True agar user ko ye opening kisi ne share ki hai: tab list mein SIRF wahi
+#                       users aate hain jinko usne khud share kiya hai. False (owner/sharer) ko
+#                       poori list dikhti hai.
+#     """
+#     can_share = bool(_can_share(name))
+#     only_mine = can_share and _is_share_recipient(name)
+#     return {"can_share": can_share, "can_view_list": can_share, "only_mine": bool(only_mine)}
+
+def _share_access(name):
+    is_recipient = _is_share_recipient(name)
+    can_share = bool(_can_share(name))
+    return {
+        "can_share": can_share,
+        "can_view_list": can_share,       # Share permission hai to list dikhegi
+        "only_mine": can_share and is_recipient,   # recipient ko sirf apne diye hue
+    }
+
+
+
+def _remove_share(name, user):
+    """
+    Ek user ka share hata deta hai (DocShare row delete).
+    Frappe Desk mein bhi saari permissions uncheck karne par yehi hota hai.
+
+    frappe.share.remove() / delete_doc() DocShare doctype par delete permission maangte
+    hain jo normal users ke role ko nahi hoti ("No permission for DocShare" error).
+    Isliye seedha DB se delete karte hain. Security: _can_share() check
+    set_doc_share() mein pehle hi ho chuka hota hai.
+    """
+    frappe.db.delete(
+        "DocShare",
+        {"share_doctype": SHARE_DOCTYPE, "share_name": name, "user": user, "everyone": 0},
+    )
+    # Shared user ki permission cache saaf karo, warna usse opening purani permission se dikhti rahegi
+    frappe.clear_cache(user=user)
+    frappe.clear_document_cache(SHARE_DOCTYPE, name)
+
+
+def _get_doc_shares(name, shared_by=None):
+    """
+    Is Job Opening ke user-wise shares (Everyone wali row chhodkar).
+    shared_by diya ho to sirf wahi shares jo us user ne banaye (DocShare ka owner = jisne share kiya).
+    """
+    filters = {"share_doctype": SHARE_DOCTYPE, "share_name": name, "everyone": 0}
+    if shared_by:
+        filters["owner"] = shared_by
+
+    shares = frappe.get_all(
+        "DocShare",
+        filters=filters,
+        fields=["user", "read", "write", "share", "submit"],
+        order_by="creation asc",
+        limit_page_length=0,
+    )
+
+    emails = [s.user for s in shares if s.user]
+    full_names = {}
+    if emails:
+        for u in frappe.get_all(
+            "User",
+            filters={"name": ["in", emails]},
+            fields=["name", "full_name"],
+            limit_page_length=0,
+        ):
+            full_names[u.name] = u.full_name
+
+    return [
+        {
+            "user": s.user,
+            "full_name": full_names.get(s.user) or s.user,
+            "read": int(s.read or 0),
+            "write": int(s.write or 0),
+            "share": int(s.share or 0),
+            "submit": int(s.submit or 0),
+        }
+        for s in shares
+    ]
+
+
+# def _visible_shares(name):
+#     """
+#     Current user ko jo shares dikhane hain:
+#     - Jise opening share hui hai -> sirf wo jo usne khud share kiye
+#     - Baaki (owner / sharer)     -> sabhi
+#     """
+#     if _is_share_recipient(name):
+#         return _get_doc_shares(name, shared_by=frappe.session.user)
+#     return _get_doc_shares(name)
+def _visible_shares(name):
+    if _is_share_recipient(name):
+        # B ko sirf wahi dikhein jo B ne khud share kiye
+        return _get_doc_shares(name, shared_by=frappe.session.user)
+    # A / owner ko poori list
+    return _get_doc_shares(name)
+
+
+@frappe.whitelist()
+def get_share_users():
+    """Share dialog ke dropdown ke liye User doctype se enabled users ki list."""
+    try:
+        users = frappe.get_all(
+            "User",
+            filters={
+                "enabled": 1,
+                "user_type": "System User",   # website/portal users nahi chahiye to rakho, warna hata do
+                "name": ["not in", ["Administrator", "Guest"]],
+            },
+            fields=["name", "full_name"],
+            order_by="full_name asc",
+            limit_page_length=0,
+        )
+        return {
+            "success": True,
+            "data": [{"name": u.name, "full_name": u.full_name or u.name} for u in users],
+        }
+    except Exception as e:
+        frappe.log_error(title="Get Share Users Error", message=frappe.get_traceback())
+        return {"success": False, "data": [], "message": str(e)}
+
+
+@frappe.whitelist()
+def get_share_access(name):
+    """
+    Current user ke liye: Share button chalega ya disabled hoga (can_share),
+    aur "Currently shared with" list dikhegi ya nahi (can_view_list).
+    """
+    try:
+        if not frappe.db.exists(SHARE_DOCTYPE, name):
+            return {"success": False, "can_share": False, "can_view_list": False, "message": "Job Opening not found"}
+
+        return {"success": True, **_share_access(name)}
+
+    except Exception as e:
+        frappe.log_error(title="Get Share Access Error", message=frappe.get_traceback())
+        return {"success": False, "can_share": False, "can_view_list": False, "message": str(e)}
+
+
+@frappe.whitelist()
+def get_doc_shares(name):
+    """Ye Job Opening abhi kin users ke saath share hai (permissions ke saath)."""
+    try:
+        if not frappe.db.exists(SHARE_DOCTYPE, name):
+            return {"success": False, "data": [], "message": "Job Opening not found"}
+
+        if not frappe.has_permission(SHARE_DOCTYPE, ptype="read", doc=name):
+            return {"success": False, "data": [], "message": "You do not have permission to view this Job Opening"}
+
+        # Share permission nahi hai to list nahi; hai to _visible_shares ke hisaab se
+        access = _share_access(name)
+        if not access["can_view_list"]:
+            return {"success": True, "data": [], **access}
+
+        return {"success": True, "data": _visible_shares(name), **access}
+
+    except Exception as e:
+        frappe.log_error(title="Get Doc Shares Error", message=frappe.get_traceback())
+        return {"success": False, "data": [], "message": str(e)}
+
+
+@frappe.whitelist()
+def set_doc_share(name, user, read=0, write=0, share=0, submit=0):
+    """
+    Ek user ke liye share add/update karta hai.
+    - Pehle se share hai  -> permissions update
+    - Naya user          -> add
+    - Saari permissions 0 -> share remove (Frappe Desk jaisa)
+    Response mein updated shares list wapas aati hai (jitni current user ko dikhani hai).
+    """
+    try:
+        if not frappe.db.exists(SHARE_DOCTYPE, name):
+            return {"success": False, "message": "Job Opening not found"}
+
+        if not _can_share(name):
+            return {"success": False, "message": "You do not have permission to share this Job Opening"}
+
+        # Jise opening share hui hai wo sirf apne diye hue shares ko badal sakta hai
+        is_recipient = _is_share_recipient(name)
+
+        if not frappe.db.exists("User", {"name": user, "enabled": 1}):
+            return {"success": False, "message": "Selected user not found or disabled"}
+
+        # Agar ye user pehle se kisi AUR ne share kiya hua hai to recipient use chhu nahi sakta
+        # (warna wo doosron ki permission badal/hata sakta tha). Apne diye hue share badal sakta hai.
+        if is_recipient:
+            existing_owner = frappe.db.get_value(
+                "DocShare",
+                {"share_doctype": SHARE_DOCTYPE, "share_name": name, "user": user, "everyone": 0},
+                "owner",
+            )
+            if existing_owner and existing_owner != frappe.session.user:
+                return {"success": False, "message": "This user already has access to this Job Opening"}
+
+        read, write, share = _to_flag(read), _to_flag(write), _to_flag(share)
+        submit = 0  # Job Opening submittable nahi hai, isliye hamesha 0
+
+        # Frappe UI jaisa rule: write ya share dena hai to read bhi chahiye
+        if write or share:
+            read = 1
+
+        if not (read or write or share):
+            # Saari permissions hata di -> user ka share hat jaata hai (Frappe jaisa)
+            _remove_share(name, user)
+        else:
+            frappe.share.add(
+                SHARE_DOCTYPE,
+                name,
+                user,
+                read=read,
+                write=write,
+                share=share,
+                notify=0,
+                # Role mein Share tick na ho tab bhi share ho sake (humara _can_share() check upar ho chuka hai)
+                flags={"ignore_share_permission": True},
+            )
+
+        frappe.db.commit()
+        return {"success": True, "data": _visible_shares(name)}
+
+    except Exception as e:
+        frappe.db.rollback()
+        frappe.log_error(title="Set Doc Share Error", message=frappe.get_traceback())
+        return {"success": False, "message": str(e)}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+
+
 # ─────────────────────────────────────────────────────────────
 # Get current logged-in user's roles
 # ─────────────────────────────────────────────────────────────
@@ -370,4 +661,5 @@ def get_current_user_roles():
             "is_site_hr_role": False,
             "message": str(e),
         }
+
     
