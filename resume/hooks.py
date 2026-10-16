@@ -328,6 +328,9 @@ fixtures = [
     {
     "doctype": "Webhook"
     },
+    {
+        "dt": "Salary Component Template"
+    }
 ]
 
 

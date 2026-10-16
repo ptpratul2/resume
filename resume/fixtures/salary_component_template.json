@@ -1,0 +1,43 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Salary Component Template",
+  "modified": "2026-07-10 11:07:15.002448",
+  "name": "SALARY STRUCTURE",
+  "template_components": [
+   {
+    "salary_component": "BASIC SALARY",
+    "section": "A"
+   },
+   {
+    "salary_component": "HOUSE RENT ALLOWANCE",
+    "section": "A"
+   },
+   {
+    "salary_component": "LEAVE TRAVEL ALLOWANCE",
+    "section": "A"
+   },
+   {
+    "salary_component": "PERSONAL ALLOWANCE",
+    "section": "A"
+   },
+   {
+    "salary_component": "PROVIDENT FUND EMPLOYER CONTRIBUTION",
+    "section": "B"
+   },
+   {
+    "salary_component": "ESIC EMPLOYER CONTRIBUTION",
+    "section": "B"
+   },
+   {
+    "salary_component": "BONUS / EX-GRATIA",
+    "section": "B"
+   },
+   {
+    "salary_component": "GRATUITY AFTER COMPLETION OF 5 YEARS",
+    "section": "B"
+   }
+  ],
+  "template_name": "STANDARD SALARY STRUCTURE"
+ }
+]
