@@ -302,7 +302,7 @@ fixtures = [
     {
         "doctype": "Print Format",
         "filters": [
-            ["doc_type", "in", ["Appointment Letter","Salary Annexure","Job Offer",]]
+            ["doc_type", "in", ["Appointment Letter","Salary Annexure","Job Offer","Employee","Employee Transfer"]]
         ]
     },
     {
@@ -315,7 +315,7 @@ fixtures = [
     {
         "doctype": "Property Setter",
         "filters": [
-            ["name", "in", ["Application Declaration","Application Form",]]
+            ["name", "in", ["Application Declaration","Application Form"]]
         ]
     },
 
@@ -330,7 +330,10 @@ fixtures = [
     },
     {
         "dt": "Salary Component Template"
-    }
+    },
+    
+    "Role",
+    "Custom DocPerm",
 ]
 
 
