@@ -45,7 +45,8 @@
   {
    "fieldname": "status",
    "fieldtype": "Select",
-   "label": "Status"
+   "label": "Status",
+   "options": "\nProcessing\nCompleted\nPartial\nFailed"
   },
   {
    "fieldname": "processed_at",
@@ -66,7 +67,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-03 13:57:26.841951",
+ "modified": "2026-10-28 12:10:06.676436",
  "modified_by": "Administrator",
  "module": "Resume",
  "name": "Resume Import Log",

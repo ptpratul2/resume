@@ -552,6 +552,7 @@ import docx  # For .docx files
 import google.generativeai as genai
 from resume.api.parse_guards import applicant_exists_for_job, should_skip_file_for_job
 from datetime import datetime
+from frappe.utils.password import get_decrypted_password
 
 # Max concurrent Gemini API calls - keep low to avoid rate limits (429)
 PARALLEL_WORKERS = 2
