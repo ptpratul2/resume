@@ -23,7 +23,7 @@
 #         api_key = frappe.conf.get("gemini_api_key")
 #         if not api_key:
 #             return {"error": "Gemini API key missing in site_config.json"}
-        
+
 #         genai.configure(api_key=api_key)
 #         models = genai.list_models()
 #         available_models = []
@@ -40,12 +40,12 @@
 #                     "display_name": getattr(model, 'display_name', 'N/A'),
 #                     "supported_methods": list(model.supported_generation_methods)
 #                 })
-        
+
 #         # Log to frappe.log for easy viewing
 #         frappe.logger().info(f"Available Gemini models: {available_models}")
 #         for detail in model_details:
 #             frappe.logger().info(f"Model: {detail['model_id']} (Full: {detail['full_name']})")
-        
+
 #         return {
 #             "available_models": available_models,
 #             "model_details": model_details
@@ -70,12 +70,12 @@
 #             prompt_template = f.read()
 
 #         prompt = prompt_template.replace("{{RESUME_TEXT}}", text)
-        
+
 #         if job_title:
 #             prompt = prompt.replace("{{JOB_TITLE}}", job_title)
 #         else:
 #             prompt = prompt.replace("{{JOB_TITLE}}", "N/A")
-            
+
 #         if job_description:
 #             prompt = prompt.replace("{{JOB_DESCRIPTION}}", job_description)
 #         else:
@@ -87,10 +87,10 @@
 #             "gemini-1.5-pro",
 #             "gemini-pro",
 #         ]
-        
+
 #         last_error = None
 #         skipped_models = []
-        
+
 #         # Helper function to try a list of models
 #         def try_models(models_to_try):
 #             nonlocal last_error
@@ -106,7 +106,7 @@
 #                     if cleaned.endswith("```"):
 #                         cleaned = cleaned[:-3]
 #                     cleaned = cleaned.strip()
-                    
+
 #                     applicant_data = json.loads(cleaned)
 #                     frappe.logger().info(f"Successfully used Gemini model: {model_name}")
 #                     return applicant_data
@@ -126,21 +126,21 @@
 #         result = try_models(model_names)
 #         if result:
 #             return result
-            
+
 #         # 2. If hardcoded models failed, try listing available models dynamically
 #         frappe.logger().warning("All hardcoded Gemini models failed. Attempting to list available models dynamically.")
 #         try:
 #             models = genai.list_models()
 #             dynamic_models = []
 #             excluded_keywords = ['computer', 'agent', 'function-calling']
-            
+
 #             for model in models:
 #                 if 'generateContent' in model.supported_generation_methods:
 #                     model_id = model.name.replace('models/', '')
 #                     model_lower = model_id.lower()
 #                     if not any(keyword in model_lower for keyword in excluded_keywords):
 #                         dynamic_models.append(model_id)
-            
+
 #             if dynamic_models:
 #                 frappe.logger().info(f"Found dynamic models: {dynamic_models}")
 #                 # Filter out ones we already tried to avoid duplicate work/logs
@@ -151,10 +151,10 @@
 #                         return result
 #         except Exception as e:
 #             frappe.logger().error(f"Failed to list dynamic models: {e}")
-        
+
 #         if skipped_models:
 #             frappe.logger().info(f"Skipped {len(skipped_models)} models that require special tools: {skipped_models}")
-        
+
 #         # If all models failed, raise the last error
 #         if last_error:
 #             raise Exception(f"All Gemini models failed. Last error: {last_error}")
@@ -178,7 +178,7 @@
 #             if not file_url:
 #                 frappe.logger().error(f"PDF Upload {docname}: Missing file URL.")
 #                 continue
-            
+
 #             # Determine if the file is public or private
 #             if file_url.startswith("/private/files/"):
 #                 file_path = frappe.get_site_path(file_url.lstrip("/"))
@@ -196,7 +196,7 @@
 #             try:
 #                 # Extract text using pdfminer
 #                 text = extract_text(file_path)
-                
+
 #                 # If text extraction failed, try using OCR
 #                 if not text or not text.strip():
 #                     text = extract_text_with_ocr(file_path)
@@ -209,12 +209,12 @@
 #                 job_description = None
 #                 if doc.job_title:
 #                     job_description = frappe.db.get_value("Job Opening", doc.job_title, "description")
-                
+
 #                 applicant_data = parse_with_gemini(text, doc.job_title, job_description)
 #             except Exception as e:
 #                  frappe.logger().error(f"PDF Upload {docname}: Error parsing text from {file_url}: {e}")
 #                  continue
-            
+
 #             if not applicant_data.get("applicant_name") or not applicant_data.get("email_id"):
 #                 frappe.logger().warning(f"PDF Upload {docname}: Missing required fields (name/email) in {file_url}")
 #                 continue
@@ -264,12 +264,6 @@
 #         raise ValueError(f"Error extracting text with OCR: {e}")
 
 
-
-
-
-
-
-
 # 2
 
 # import frappe
@@ -301,7 +295,7 @@
 #         api_key = frappe.conf.get("gemini_api_key")
 #         if not api_key:
 #             return {"error": "Gemini API key missing in site_config.json"}
-        
+
 #         genai.configure(api_key=api_key)
 #         models = genai.list_models()
 #         available_models = []
@@ -317,7 +311,7 @@
 #                     "display_name": getattr(model, 'display_name', 'N/A'),
 #                     "supported_methods": list(model.supported_generation_methods)
 #                 })
-        
+
 #         frappe.logger().info(f"Available Gemini models: {available_models}")
 #         return {"available_models": available_models, "model_details": model_details}
 #     except Exception as e:
@@ -344,7 +338,7 @@
 #         model_names = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
 #         last_error = None
 #         skipped_models = []
-        
+
 #         def try_models(models_to_try):
 #             nonlocal last_error
 #             for model_name in models_to_try:
@@ -366,11 +360,11 @@
 
 #         result = try_models(model_names)
 #         if result: return result
-        
+
 #         # Dynamic fallback
 #         models = genai.list_models()
-#         dynamic_models = [m.name.replace('models/', '') for m in models 
-#                           if 'generateContent' in m.supported_generation_methods 
+#         dynamic_models = [m.name.replace('models/', '') for m in models
+#                           if 'generateContent' in m.supported_generation_methods
 #                           and m.name.replace('models/', '') not in model_names]
 #         return try_models(dynamic_models) or (lambda: exec('raise last_error'))()
 #     except Exception as e:
@@ -395,18 +389,18 @@
 #                 message=f"file_path: {file_path}"
 #             )
 #             text = extract_text_with_ocr(file_path)
-    
+
 #     elif ext == ".docx":
 #         doc = docx.Document(file_path)
 #         text = "\n".join([para.text for para in doc.paragraphs])
-    
+
 #     elif ext in [".jpg", ".jpeg", ".png"]:
 #         text = pytesseract.image_to_string(Image.open(file_path))
-    
+
 #     elif ext == ".txt":
 #         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
 #             text = f.read()
-    
+
 #     else:
 #         frappe.logger().warning(f"Unsupported file format: {ext}")
 #         return None
@@ -434,7 +428,7 @@
 
 #     with open(file_path, "rb") as f:
 #         pdf_bytes = f.read()
-        
+
 #     prompt_path = frappe.get_app_path("resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt")
 #     with open(prompt_path, "r") as f:
 #         prompt_template = f.read()
@@ -472,7 +466,7 @@
 #         for file_entry in doc.get("files"):
 #             file_url = file_entry.get("file_upload")
 #             if not file_url: continue
-            
+
 #             # File Path logic
 #             if file_url.startswith("/private/files/"):
 #                 file_path = frappe.get_site_path(file_url.lstrip("/"))
@@ -500,7 +494,7 @@
 #             except Exception as e:
 #                  frappe.logger().error(f"AI Parsing failed for {file_url}: {str(e)}")
 #                  continue
-            
+
 #             # 3. Validation & Creation
 #             email = applicant_data.get("email_id")
 #             if not email or not applicant_data.get("applicant_name"):
@@ -536,7 +530,6 @@
 #         frappe.logger().error(f"Critical error in background job {docname}: {str(e)}")
 
 
-
 # 3
 
 import frappe
@@ -566,6 +559,7 @@ GEMINI_RETRY_ATTEMPTS = 2
 GEMINI_RETRY_BASE_DELAY = 3  # seconds
 _GEMINI_RETRY_COUNT = 0
 _GEMINI_RETRY_LOCK = threading.Lock()
+
 
 class PDFUpload(Document):
     pass
@@ -607,7 +601,9 @@ def process_pdfs(docname):
     if not frappe.db.exists("PDF Upload", docname):
         frappe.throw(_("PDF Upload {0} was not found.").format(frappe.bold(docname)))
 
-    api_key = get_decrypted_password("ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False) or frappe.conf.get("gemini_api_key")
+    api_key = get_decrypted_password(
+        "ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False
+    ) or frappe.conf.get("gemini_api_key")
     if not api_key:
         frappe.throw(
             _(
@@ -620,7 +616,9 @@ def process_pdfs(docname):
     rows = doc.get("files") or []
     if not rows or not any(r.get("file_upload") for r in rows):
         frappe.throw(
-            _("Add at least one file in the Files table, save, then run processing again."),
+            _(
+                "Add at least one file in the Files table, save, then run processing again."
+            ),
             title=_("No files to process"),
         )
 
@@ -652,47 +650,57 @@ def process_pdfs(docname):
         indicator="green",
     )
 
+
 # --- AI Logic (UNCHANGED as per request) ---
 @frappe.whitelist()
 def list_available_gemini_models():
     """List available Gemini models for debugging."""
     try:
-        api_key = get_decrypted_password("ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False) or frappe.conf.get("gemini_api_key")
+        api_key = get_decrypted_password(
+            "ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False
+        ) or frappe.conf.get("gemini_api_key")
         if not api_key:
             return {"error": "Gemini API key missing in site_config.json"}
-        
+
         genai.configure(api_key=api_key)
         models = genai.list_models()
         available_models = []
         model_details = []
         for model in models:
-            if 'generateContent' in model.supported_generation_methods:
+            if "generateContent" in model.supported_generation_methods:
                 model_name = model.name
-                model_id = model_name.replace('models/', '')
+                model_id = model_name.replace("models/", "")
                 available_models.append(model_id)
-                model_details.append({
-                    "full_name": model_name,
-                    "model_id": model_id,
-                    "display_name": getattr(model, 'display_name', 'N/A'),
-                    "supported_methods": list(model.supported_generation_methods)
-                })
-        
+                model_details.append(
+                    {
+                        "full_name": model_name,
+                        "model_id": model_id,
+                        "display_name": getattr(model, "display_name", "N/A"),
+                        "supported_methods": list(model.supported_generation_methods),
+                    }
+                )
+
         frappe.logger().info(f"Available Gemini models: {available_models}")
         return {"available_models": available_models, "model_details": model_details}
     except Exception as e:
         frappe.logger().error(f"Error listing Gemini models: {str(e)}")
         return {"error": str(e)}
 
+
 def parse_with_gemini(text, job_title=None, job_description=None):
     """AI Logic: Send resume text to Gemini model and return structured JSON."""
     # (No changes made to this function as requested)
     try:
-        api_key = get_decrypted_password("ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False) or frappe.conf.get("gemini_api_key")
+        api_key = get_decrypted_password(
+            "ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False
+        ) or frappe.conf.get("gemini_api_key")
         if not api_key:
             raise Exception("Gemini API key missing in site_config.json")
 
         genai.configure(api_key=api_key)
-        prompt_path = frappe.get_app_path("resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt")
+        prompt_path = frappe.get_app_path(
+            "resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt"
+        )
         with open(prompt_path, "r") as f:
             prompt_template = f.read()
         today_date = datetime.now().strftime("%B %Y")
@@ -706,7 +714,7 @@ def parse_with_gemini(text, job_title=None, job_description=None):
         model_names = ["gemini-2.5-flash"]  # keep single low-cost model
         last_error = None
         skipped_models = []
-        
+
         def try_models(models_to_try):
             nonlocal last_error
             for model_name in models_to_try:
@@ -715,8 +723,10 @@ def parse_with_gemini(text, job_title=None, job_description=None):
                     model = genai.GenerativeModel(model_name)
                     response = model.generate_content(prompt)
                     cleaned = response.text.strip()
-                    if cleaned.startswith("```json"): cleaned = cleaned[7:]
-                    if cleaned.endswith("```"): cleaned = cleaned[:-3]
+                    if cleaned.startswith("```json"):
+                        cleaned = cleaned[7:]
+                    if cleaned.endswith("```"):
+                        cleaned = cleaned[:-3]
                     return json.loads(cleaned.strip())
                 except Exception as e:
                     if "Computer Use tool" in str(e):
@@ -727,15 +737,18 @@ def parse_with_gemini(text, job_title=None, job_description=None):
             return None
 
         result = try_models(model_names)
-        if result: return result
-        
+        if result:
+            return result
+
         # Dynamic fallback
         raise last_error or Exception("Gemini parsing failed")
     except Exception as e:
         frappe.logger().error(f"Gemini parsing failed: {e}")
         raise
 
+
 # --- Text Extraction Logic (Enhanced for all formats) ---
+
 
 def extract_text_from_legacy_doc(file_path):
     """Plain text from legacy Word .doc (OLE). python-docx does not read .doc.
@@ -771,7 +784,9 @@ def extract_text_from_any_file(file_path):
     ext = os.path.splitext(file_path)[1].lower()
     text = ""
 
-    frappe.logger().info(f"Starting extraction for file: {file_path} with extension: {ext}")
+    frappe.logger().info(
+        f"Starting extraction for file: {file_path} with extension: {ext}"
+    )
 
     if ext == ".pdf":
         text = extract_text(file_path)
@@ -779,7 +794,7 @@ def extract_text_from_any_file(file_path):
             # Image-based PDF: return None - caller will use parse_with_gemini_file (direct PDF to Gemini)
             # This bypasses OCR/poppler which often fails and is slow
             return None
-    
+
     elif ext == ".docx":
         doc = docx.Document(file_path)
         parts = [para.text for para in doc.paragraphs]
@@ -791,22 +806,25 @@ def extract_text_from_any_file(file_path):
     elif ext == ".doc":
         extracted = extract_text_from_legacy_doc(file_path)
         if not extracted:
-            frappe.logger().warning(f"Could not extract text from legacy .doc: {file_path}")
+            frappe.logger().warning(
+                f"Could not extract text from legacy .doc: {file_path}"
+            )
             return None
         text = extracted
-    
+
     elif ext in [".jpg", ".jpeg", ".png"]:
         text = pytesseract.image_to_string(Image.open(file_path))
-    
+
     elif ext == ".txt":
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             text = f.read()
-    
+
     else:
         frappe.logger().warning(f"Unsupported file format: {ext}")
         return None
 
     return text.strip()
+
 
 def extract_text_with_ocr(file_path):
     """OCR for Scanned PDFs."""
@@ -817,15 +835,22 @@ def extract_text_with_ocr(file_path):
         frappe.logger().error(f"OCR Error: {str(e)}")
         return ""
 
+
 import base64
+
+
 def parse_with_gemini_file(file_path, job_title=None, job_description=None):
     """Send PDF directly to Gemini - bypasses OCR, works for image-based PDFs. Faster."""
-    api_key = get_decrypted_password("ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False) or frappe.conf.get("gemini_api_key")
+    api_key = get_decrypted_password(
+        "ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False
+    ) or frappe.conf.get("gemini_api_key")
     if not api_key:
         raise Exception("Gemini API key missing in site_config.json")
 
     genai.configure(api_key=api_key)
-    prompt_path = frappe.get_app_path("resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt")
+    prompt_path = frappe.get_app_path(
+        "resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt"
+    )
     with open(prompt_path, "r") as f:
         prompt_template = f.read()
     today_date = datetime.now().strftime("%B %Y")
@@ -845,10 +870,7 @@ def parse_with_gemini_file(file_path, job_title=None, job_description=None):
         try:
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(
-                [
-                    {"mime_type": "application/pdf", "data": pdf_bytes},
-                    prompt
-                ]
+                [{"mime_type": "application/pdf", "data": pdf_bytes}, prompt]
             )
             text = response.text.strip()
             if text.startswith("```"):
@@ -860,12 +882,25 @@ def parse_with_gemini_file(file_path, job_title=None, job_description=None):
             continue
     raise last_error
 
+
 # --- Background Job (Parallel Processing) ---
+
 
 def _is_retryable_error(exc):
     """Check if error is rate limit or transient (worth retrying)."""
     msg = str(exc).lower()
-    return any(x in msg for x in ["429", "resource_exhausted", "rate limit", "quota", "503", "overloaded"])
+    return any(
+        x in msg
+        for x in [
+            "429",
+            "resource_exhausted",
+            "rate limit",
+            "quota",
+            "503",
+            "overloaded",
+        ]
+    )
+
 
 def _call_gemini_with_retry(call_fn):
     """Execute Gemini API call with exponential backoff on rate limits."""
@@ -879,11 +914,12 @@ def _call_gemini_with_retry(call_fn):
                 global _GEMINI_RETRY_COUNT
                 with _GEMINI_RETRY_LOCK:
                     _GEMINI_RETRY_COUNT += 1
-                delay = GEMINI_RETRY_BASE_DELAY * (2 ** attempt)
+                delay = GEMINI_RETRY_BASE_DELAY * (2**attempt)
                 time.sleep(delay)
             else:
                 raise
     raise last_error
+
 
 def _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc):
     """Thread-safe: parse text with Gemini. Retries on rate limit."""
@@ -898,18 +934,23 @@ def _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc):
     # for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]:
     for model_name in ["gemini-2.5-flash"]:
         try:
+
             def _call(m=model_name, p=prompt):
                 model = genai.GenerativeModel(m)
                 response = model.generate_content(p)
                 cleaned = response.text.strip()
-                if cleaned.startswith("```json"): cleaned = cleaned[7:]
-                if cleaned.endswith("```"): cleaned = cleaned[:-3]
+                if cleaned.startswith("```json"):
+                    cleaned = cleaned[7:]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
                 return json.loads(cleaned.strip())
+
             return _call_gemini_with_retry(lambda: _call())
         except Exception as e:
             last_error = e
             continue
     raise last_error or Exception("All Gemini models failed")
+
 
 def _parse_pdf_threadsafe(api_key, prompt_template, file_path, job_title, job_desc):
     """Thread-safe: send PDF to Gemini. Retries on rate limit."""
@@ -926,18 +967,23 @@ def _parse_pdf_threadsafe(api_key, prompt_template, file_path, job_title, job_de
     # for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]:
     for model_name in ["gemini-2.5-flash"]:
         try:
+
             def _call(m=model_name, p=prompt, b=pdf_bytes):
                 model = genai.GenerativeModel(m)
-                response = model.generate_content([{"mime_type": "application/pdf", "data": b}, p])
+                response = model.generate_content(
+                    [{"mime_type": "application/pdf", "data": b}, p]
+                )
                 text = response.text.strip()
                 if text.startswith("```"):
                     text = text.replace("```json", "").replace("```", "").strip()
                 return json.loads(text)
+
             return _call_gemini_with_retry(lambda: _call())
         except Exception as e:
             last_error = e
             continue
     raise last_error or Exception("All Gemini models failed for PDF")
+
 
 def _extract_text(file_path, ext):
     """Extract text from file. No frappe logging."""
@@ -960,44 +1006,186 @@ def _extract_text(file_path, ext):
             return f.read()
     return None
 
+
 # def _extract_and_parse_file(args):
 #     """Runs in thread. Uses pre-loaded api_key + prompt_template. No frappe calls."""
 #     file_path, file_url, job_title, job_desc, ext, api_key, prompt_template = args
+#     file_name = os.path.basename(file_path)
 #     try:
 #         if ext == ".pdf":
 #             text = _extract_text(file_path, ext)
 #             if text:
-#                 applicant_data = _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc)
+#                 applicant_data = _parse_text_threadsafe(
+#                     api_key, prompt_template, text, job_title, job_desc
+#                 )
 #             else:
-#                 applicant_data = _parse_pdf_threadsafe(api_key, prompt_template, file_path, job_title, job_desc)
+#                 applicant_data = _parse_pdf_threadsafe(
+#                     api_key, prompt_template, file_path, job_title, job_desc
+#                 )
 #         else:
 #             text = _extract_text(file_path, ext)
 #             if not text:
-#                 return (file_url, None, f"Could not extract text from {file_url}")
-#             applicant_data = _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc)
-#         return (file_url, applicant_data, None)
+#                 return (
+#                     file_url,
+#                     file_name,
+#                     None,
+#                     f"Could not extract text from {file_url}",
+#                 )
+#             applicant_data = _parse_text_threadsafe(
+#                 api_key, prompt_template, text, job_title, job_desc
+#             )
+#         return (file_url, file_name, applicant_data, None)
 #     except Exception as e:
-#         return (file_url, None, str(e))
+#         return (file_url, file_name, None, str(e))
+
 
 def _extract_and_parse_file(args):
-    """Runs in thread. Uses pre-loaded api_key + prompt_template. No frappe calls."""
+    """Try normal text, direct PDF parsing, then OCR text + Gemini."""
+
     file_path, file_url, job_title, job_desc, ext, api_key, prompt_template = args
     file_name = os.path.basename(file_path)
+
+    # Keep useful partial data if an earlier attempt misses a field.
+    best_data = {}
+    errors = []
+
+    def merge_data(new_data):
+        if not isinstance(new_data, dict):
+            return
+
+        for key, value in new_data.items():
+            if value is not None and value != "" and value != [] and value != {}:
+                best_data[key] = value
+
+    def has_name_and_email(data):
+        name = data.get("applicant_name") or data.get("name") or data.get("full_name")
+        email = data.get("email_id") or data.get("email")
+
+        return bool(
+            isinstance(name, str)
+            and name.strip()
+            and isinstance(email, str)
+            and email.strip()
+        )
+
+    # ---------------------------------------------------------
+    # PDF: normal extraction -> direct PDF Gemini -> OCR + Gemini
+    # ---------------------------------------------------------
+    if ext == ".pdf":
+
+        # STEP 1: Try normal PDF text extraction.
+        try:
+            text = _extract_text(file_path, ext)
+        except Exception as exc:
+            text = None
+            errors.append(f"Normal PDF extraction failed: {exc}")
+
+        # If text exists, send it to Gemini first.
+        if text and text.strip():
+            try:
+                data = _parse_text_threadsafe(
+                    api_key, prompt_template, text, job_title, job_desc
+                )
+                merge_data(data)
+
+                if has_name_and_email(best_data):
+                    return file_url, file_name, best_data, None
+
+            except Exception as exc:
+                errors.append(f"Text-to-Gemini failed: {exc}")
+
+        # STEP 2: Try sending the original PDF directly to Gemini.
+        try:
+            frappe.log_error(f"[DEBUG] Direct PDF Gemini started: {file_name}")
+            frappe.logger("resume_ocr").warning(
+                f"[DEBUG] Direct PDF Gemini started: {file_name}"
+            )
+            data = _parse_pdf_threadsafe(
+                api_key, prompt_template, file_path, job_title, job_desc
+            )
+            merge_data(data)
+
+            if has_name_and_email(best_data):
+                frappe.log_error(f"[DEBUG] Direct PDF Gemini succeeded: {file_name}")
+                frappe.logger("resume_ocr").warning(
+                    f"[DEBUG] Direct PDF Gemini succeeded: {file_name}"
+                )
+                return file_url, file_name, best_data, None
+
+        except Exception as exc:
+            errors.append(f"Direct PDF Gemini failed: {exc}")
+
+        # STEP 3: OCR the PDF, then send extracted text to Gemini.
+        frappe.log_error(f"[OCR FALLBACK] Triggered for file: {file_name}")
+        frappe.logger("resume_ocr").info(
+            f"[OCR FALLBACK] Triggered for file: {file_name}"
+        )
+
+        try:
+            ocr_text = extract_text_with_ocr(file_path)
+            frappe.log_error(
+                f"[OCR RESULT] File: {file_name}, "
+                f"Text length: {len(ocr_text) if ocr_text else 0}"
+            )
+            frappe.logger("resume_ocr").warning(
+                f"[OCR RESULT] File: {file_name}, "
+                f"Text length: {len(ocr_text) if ocr_text else 0}"
+            )
+        except Exception as exc:
+            ocr_text = ""
+            errors.append(f"OCR failed: {exc}")
+            frappe.log_error(f"[OCR ERROR] File: {file_name}, Error: {exc}")
+            frappe.logger("resume_ocr").error(
+                f"[OCR ERROR] File: {file_name}, Error: {exc}"
+            )
+
+        if ocr_text and ocr_text.strip():
+            try:
+                data = _parse_text_threadsafe(
+                    api_key, prompt_template, ocr_text, job_title, job_desc
+                )
+                merge_data(data)
+
+                if has_name_and_email(best_data):
+                    return file_url, file_name, best_data, None
+
+            except Exception as exc:
+                errors.append(f"OCR text Gemini failed: {exc}")
+
+        # Keep partial data so existing code can mark Missing Data.
+        if best_data:
+            return file_url, file_name, best_data, None
+
+        return (
+            file_url,
+            file_name,
+            None,
+            "; ".join(errors)
+            or "PDF extraction, direct Gemini and OCR fallback failed",
+        )
+
+    # ---------------------------------------------------------
+    # Non-PDF: keep the existing text extraction + Gemini flow.
+    # ---------------------------------------------------------
     try:
-        if ext == ".pdf":
-            text = _extract_text(file_path, ext)
-            if text:
-                applicant_data = _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc)
-            else:
-                applicant_data = _parse_pdf_threadsafe(api_key, prompt_template, file_path, job_title, job_desc)
-        else:
-            text = _extract_text(file_path, ext)
-            if not text:
-                return (file_url, file_name, None, f"Could not extract text from {file_url}")
-            applicant_data = _parse_text_threadsafe(api_key, prompt_template, text, job_title, job_desc)
-        return (file_url, file_name, applicant_data, None)
-    except Exception as e:
-        return (file_url, file_name, None, str(e))
+        text = _extract_text(file_path, ext)
+
+        if not text or not text.strip():
+            return (
+                file_url,
+                file_name,
+                None,
+                f"Could not extract text from {file_url}",
+            )
+
+        data = _parse_text_threadsafe(
+            api_key, prompt_template, text, job_title, job_desc
+        )
+
+        return file_url, file_name, data, None
+
+    except Exception as exc:
+        return file_url, file_name, None, str(exc)
 
 
 def process_files_background(docname):
@@ -1011,7 +1199,11 @@ def process_files_background(docname):
             frappe.log_error(msg, "PDF Upload — no files")
             return
 
-        job_desc = frappe.db.get_value("Job Opening", doc.job_title, "description") if doc.job_title else None
+        job_desc = (
+            frappe.db.get_value("Job Opening", doc.job_title, "description")
+            if doc.job_title
+            else None
+        )
         job_title = doc.job_title
 
         if doc.job_title:
@@ -1029,13 +1221,17 @@ def process_files_background(docname):
                 return
 
         # Pre-load for threads (no frappe in worker threads)
-        api_key = get_decrypted_password("ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False) or frappe.conf.get("gemini_api_key")
+        api_key = get_decrypted_password(
+            "ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False
+        ) or frappe.conf.get("gemini_api_key")
         if not api_key:
             msg = "PDF Upload resume job skipped: gemini_api_key missing in site_config.json"
             frappe.logger().error(msg)
             frappe.log_error(msg, "PDF Upload — Gemini not configured")
             return
-        prompt_path = frappe.get_app_path("resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt")
+        prompt_path = frappe.get_app_path(
+            "resume", "resume", "doctype", "pdf_upload", "resume_prompt.txt"
+        )
         with open(prompt_path, "r") as f:
             prompt_template = f.read()
 
@@ -1065,7 +1261,11 @@ def process_files_background(docname):
                 continue
 
             if not file_path or not os.path.exists(file_path):
-                path_parts = file_url.lstrip("/").split("/") if file_url.startswith("/private") else ["public"] + file_url.lstrip("/").split("/")
+                path_parts = (
+                    file_url.lstrip("/").split("/")
+                    if file_url.startswith("/private")
+                    else ["public"] + file_url.lstrip("/").split("/")
+                )
                 file_path = os.path.abspath(frappe.get_site_path(*path_parts))
 
             if not os.path.exists(file_path):
@@ -1073,7 +1273,17 @@ def process_files_background(docname):
                 continue
 
             ext = os.path.splitext(file_path)[1].lower()
-            tasks.append((file_path, file_url, job_title, job_desc, ext, api_key, prompt_template))
+            tasks.append(
+                (
+                    file_path,
+                    file_url,
+                    job_title,
+                    job_desc,
+                    ext,
+                    api_key,
+                    prompt_template,
+                )
+            )
 
         if not tasks:
             frappe.log_error(
@@ -1083,7 +1293,9 @@ def process_files_background(docname):
             return
 
         t_path_elapsed = time.perf_counter() - t_path_start
-        frappe.logger().info(f"PDF Upload {docname}: Path resolution {t_path_elapsed:.2f}s for {len(tasks)} file(s)")
+        frappe.logger().info(
+            f"PDF Upload {docname}: Path resolution {t_path_elapsed:.2f}s for {len(tasks)} file(s)"
+        )
 
         # 2. Parse files (2 at a time to avoid rate limits; retries on 429)
         reset_gemini_retry_counter()
@@ -1107,7 +1319,9 @@ def process_files_background(docname):
 
         t_parse_elapsed = time.perf_counter() - t_parse_start
         gemini_retries = get_gemini_retry_counter()
-        frappe.logger().info(f"PDF Upload {docname}: AI parsing {t_parse_elapsed:.2f}s ({len(results)}/{len(tasks)} parsed)")
+        frappe.logger().info(
+            f"PDF Upload {docname}: AI parsing {t_parse_elapsed:.2f}s ({len(results)}/{len(tasks)} parsed)"
+        )
         frappe.logger().info(
             f"PDF Upload {docname}: Parse audit parsed={len(results)} "
             f"skipped_existing_attachment={skipped_existing_attachment} gemini_retries={gemini_retries}"
@@ -1117,7 +1331,11 @@ def process_files_background(docname):
         t_db_start = time.perf_counter()
         status_options = frappe.get_meta("Job Applicant").get_options("status") or ""
         valid_statuses = [s.strip() for s in status_options.split("\n") if s.strip()]
-        default_status = "CV Submitted" if "CV Submitted" in valid_statuses else (valid_statuses[0] if valid_statuses else "Open")
+        default_status = (
+            "CV Submitted"
+            if "CV Submitted" in valid_statuses
+            else (valid_statuses[0] if valid_statuses else "Open")
+        )
 
         created_names = []
         skipped_duplicate = 0
@@ -1125,41 +1343,63 @@ def process_files_background(docname):
         insert_failed = []
 
         for file_url, applicant_data in results:
-            email = (applicant_data.get("email_id") or applicant_data.get("email") or "").strip().lower()
+            email = (
+                (applicant_data.get("email_id") or applicant_data.get("email") or "")
+                .strip()
+                .lower()
+            )
             if not email or not applicant_data.get("applicant_name"):
-                frappe.logger().warning(f"Missing Name/Email in AI response for {file_url}")
+                frappe.logger().warning(
+                    f"Missing Name/Email in AI response for {file_url}"
+                )
                 skipped_missing += 1
                 continue
 
             if doc.job_title and applicant_exists_for_job(email, doc.job_title):
-                frappe.logger().info(f"Skipping: Applicant {email} already exists for job {doc.job_title}.")
+                frappe.logger().info(
+                    f"Skipping: Applicant {email} already exists for job {doc.job_title}."
+                )
                 skipped_duplicate += 1
                 continue
 
             try:
-                new_applicant = frappe.get_doc({
-                    "doctype": "Job Applicant",
-                    "applicant_name": applicant_data.get("applicant_name"),
-                    "email_id": email,
-                    "phone_number": applicant_data.get("phone_number"),
-                    "custom_phone_number_2": applicant_data.get("custom_phone_number_2", ""),
-                    "resume_attachment": file_url,
-                    "status": default_status,
-                    "job_title": doc.job_title,
-                    "designation": doc.designation,
-                    "applicant_rating": applicant_data.get("applicant_rating"),
-                    "score": applicant_data.get("score"),
-                    "fit_level": applicant_data.get("fit_level"),
-                    "justification_by_ai": applicant_data.get("justification_by_ai"),
-                    "custom_yes": 1,
-                    "custom_current_company": applicant_data.get("custom_current_company"),
-                    "custom_total_experience": applicant_data.get("custom_total_experience")
-                })
+                new_applicant = frappe.get_doc(
+                    {
+                        "doctype": "Job Applicant",
+                        "applicant_name": applicant_data.get("applicant_name"),
+                        "email_id": email,
+                        "phone_number": applicant_data.get("phone_number"),
+                        "custom_phone_number_2": applicant_data.get(
+                            "custom_phone_number_2", ""
+                        ),
+                        "resume_attachment": file_url,
+                        "status": default_status,
+                        "job_title": doc.job_title,
+                        "designation": doc.designation,
+                        "applicant_rating": applicant_data.get("applicant_rating"),
+                        "score": applicant_data.get("score"),
+                        "fit_level": applicant_data.get("fit_level"),
+                        "justification_by_ai": applicant_data.get(
+                            "justification_by_ai"
+                        ),
+                        "custom_yes": 1,
+                        "custom_current_company": applicant_data.get(
+                            "custom_current_company"
+                        ),
+                        "custom_total_experience": applicant_data.get(
+                            "custom_total_experience"
+                        ),
+                    }
+                )
                 new_applicant.insert(ignore_permissions=True)
                 created_names.append(new_applicant.name)
-                frappe.logger().info(f"Successfully Created Applicant: {new_applicant.name} from {file_url}")
+                frappe.logger().info(
+                    f"Successfully Created Applicant: {new_applicant.name} from {file_url}"
+                )
             except Exception as e:
-                frappe.logger().error(f"Database insertion failed for {email}: {str(e)}")
+                frappe.logger().error(
+                    f"Database insertion failed for {email}: {str(e)}"
+                )
                 frappe.log_error(
                     frappe.get_traceback(with_context=True),
                     f"PDF Upload Job Applicant insert failed ({email})",
@@ -1177,7 +1417,9 @@ def process_files_background(docname):
         summary_parts = [
             _("Resume import finished in {0:.1f}s.").format(t_total),
             _("Created: {0}").format(len(created_names)),
-            _("Skipped (already imported attachment): {0}").format(skipped_existing_attachment),
+            _("Skipped (already imported attachment): {0}").format(
+                skipped_existing_attachment
+            ),
             _("Skipped (duplicate email for this job): {0}").format(skipped_duplicate),
             _("Skipped (missing name/email from AI): {0}").format(skipped_missing),
             _("Gemini retries: {0}").format(gemini_retries),
@@ -1185,20 +1427,25 @@ def process_files_background(docname):
             _("Insert errors: {0}").format(len(insert_failed)),
         ]
         if created_names:
-            summary_parts.append(_("Applicants: {0}").format(", ".join(created_names[:20])))
+            summary_parts.append(
+                _("Applicants: {0}").format(", ".join(created_names[:20]))
+            )
         if parse_errors:
             summary_parts.append(_("First error: {0}").format(parse_errors[0][:500]))
         try:
             doc.add_comment("Comment", text="\n".join(summary_parts))
         except Exception:
-            frappe.logger().error(f"PDF Upload {docname}: could not add summary comment")
+            frappe.logger().error(
+                f"PDF Upload {docname}: could not add summary comment"
+            )
 
         frappe.db.commit()
 
     except Exception as e:
         frappe.logger().error(f"Critical error in background job {docname}: {str(e)}")
-        frappe.log_error(frappe.get_traceback(with_context=True), f"PDF Upload critical {docname}")
-        
+        frappe.log_error(
+            frappe.get_traceback(with_context=True), f"PDF Upload critical {docname}"
+        )
 
 
 #####
@@ -1213,10 +1460,11 @@ def process_resume_pipeline(file_path, job_title=None, job_desc=None):
 
     # ---------------- STEP 1: NORMAL EXTRACTION ----------------
     text = extract_text_from_any_file(file_path)
-    
+
     frappe.log_error(
         title="process_resume_pipeline - extracted text",
-        message=f"Extracted text {text}"   ) 
+        message=f"Extracted text {text}",
+    )
 
     # ---------------- STEP 2: OCR ----------------
     if not text or len(text.strip()) < 30:

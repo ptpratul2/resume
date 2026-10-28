@@ -114,5 +114,39 @@
   ],
   "webhook_json": "{\r\n  \"interview_id\": \"{{ doc.name }}\",\r\n  \"job_applicant\": \"{{ doc.job_applicant }}\",\r\n  \"scheduled_on\": \"{{ doc.scheduled_on }}\",\r\n  \"from_time\": \"{{ doc.from_time }}\",\r\n  \"to_time\": \"{{ doc.to_time }}\",\r\n  \"interview_round\": \"{{ doc.interview_round }}\",\r\n  \"custom_location\": \"{{ doc.custom_location }}\",\r\n  \"status\": \"{{ doc.status }}\",\r\n  \"scheduled_by\":\"{{ frappe.session.user }}\",\r\n  \"interviewers\": {{ doc.interview_details | tojson }}\r\n}",
   "webhook_secret": null
+ },
+ {
+  "background_jobs_queue": null,
+  "condition": "",
+  "docstatus": 0,
+  "doctype": "Webhook",
+  "enable_security": 0,
+  "enabled": 0,
+  "is_dynamic_url": 0,
+  "modified": "2026-10-13 13:43:05.893795",
+  "name": "Employee Auto",
+  "request_method": "POST",
+  "request_structure": "JSON",
+  "request_url": "https://ats.vaaman.in/api/resource/Employee",
+  "timeout": 5,
+  "webhook_data": [],
+  "webhook_docevent": "after_insert",
+  "webhook_doctype": "Employee",
+  "webhook_headers": [
+   {
+    "key": "Content-Type",
+    "value": "application/json"
+   },
+   {
+    "key": "Authorization",
+    "value": "token b1e4315e4370961:f23f015ca0ef08c"
+   },
+   {
+    "key": "Accept",
+    "value": "application/json"
+   }
+  ],
+  "webhook_json": "\r\n{\r\n  \"naming_series\": {{ doc.naming_series | tojson }},\r\n  \"first_name\": {{ doc.first_name | tojson }},\r\n  \"middle_name\": {{ doc.middle_name | tojson }},\r\n  \"last_name\": {{ doc.last_name | tojson }},\r\n  \"gender\": {{ doc.gender | tojson }},\r\n  \"date_of_birth\": {{ doc.date_of_birth | tojson }},\r\n  \"date_of_joining\": {{ doc.date_of_joining | tojson }},\r\n  \"status\": {{ doc.status | tojson }},\r\n  \"custom_staffworker\": {{ doc.custom_staffworker | tojson }}\r\n}\r\n",
+  "webhook_secret": null
  }
 ]

@@ -1,6 +1,7 @@
 import frappe
 import secrets
 
+
 @frappe.whitelist(allow_guest=True)
 def send_otp_email(email=None, otp=None):
     try:
@@ -11,7 +12,7 @@ def send_otp_email(email=None, otp=None):
                 <h2>Your OTP is {otp}</h2>
                 <p>Valid for 15 minutes</p>
             """,
-            delayed=False
+            delayed=False,
         )
 
         return {"success": True}
@@ -19,6 +20,7 @@ def send_otp_email(email=None, otp=None):
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "OTP Email Error")
         frappe.throw(str(e))
+
 
 # @frappe.whitelist()
 # def generate_document_link(applicant_name):
@@ -58,27 +60,20 @@ def send_otp_email(email=None, otp=None):
 
 #     return {"success": True}
 
+
 @frappe.whitelist()
 def generate_document_link(applicant_name):
 
     token = secrets.token_urlsafe(24)
 
-    doc = frappe.get_doc(
-        "Job Applicant",
-        applicant_name
-    )
+    doc = frappe.get_doc("Job Applicant", applicant_name)
 
     doc.custom_verification_token = token
     doc.save(ignore_permissions=True)
 
     # 👇 NAYI LINE — HR jo button click kar raha hai, usi ko "owner" bana do
     # db_set direct DB update karta hai, validation/save cycle trigger nahi hota
-    frappe.db.set_value(
-        "Job Applicant",
-        applicant_name,
-        "owner",
-        frappe.session.user
-    )
+    frappe.db.set_value("Job Applicant", applicant_name, "owner", frappe.session.user)
 
     frappe.db.commit()
     host_name = frappe.conf.get("host_name")
@@ -96,7 +91,7 @@ def generate_document_link(applicant_name):
             Please upload your documents using link below:<br><br>
             <a href="{link}">Upload Documents</a>
         """,
-        delayed=False
+        delayed=False,
     )
 
     return {"success": True}
@@ -109,17 +104,14 @@ def verify_document_token(token):
         "Job Applicant",
         {"custom_verification_token": token},
         ["name", "email_id"],
-        as_dict=True
+        as_dict=True,
     )
 
     if not row:
         return {"valid": False}
 
-    return {
-        "valid": True,
-        "email": row.email_id,
-        "name": row.name
-    }
+    return {"valid": True, "email": row.email_id, "name": row.name}
+
 
 @frappe.whitelist()
 def set_document_owner(doctype, name, owner):
@@ -132,7 +124,7 @@ def set_document_owner(doctype, name, owner):
     allowed_doctypes = [
         "Applicant Document",
         "Application Form",
-        "Application Declaration"
+        "Application Declaration",
     ]
 
     if doctype not in allowed_doctypes:
