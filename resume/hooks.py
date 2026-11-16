@@ -281,7 +281,7 @@ fixtures = [
     {
         "doctype": "Custom Field",
         "filters": [
-            ["dt", "in", ["Interview", "Job Applicant", "Job Offer","Interview Feedback","Applicant Document","Appointment Letter","Salary Annexure","Application Declaration","Employee"]]
+            ["dt", "in", ["Interview", "Job Applicant", "Job Offer","Interview Feedback","Applicant Document","Appointment Letter","Salary Annexure","Application Declaration","Employee","Joining Confirmation"]]
         ]
     },
 
@@ -327,6 +327,9 @@ fixtures = [
     },
     {
     "doctype": "Webhook"
+    },
+    {
+     "doctype": "Notification"
     },
     {
         "dt": "Salary Component Template"
