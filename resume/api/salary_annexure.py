@@ -515,6 +515,7 @@ def get_salary_annexure_list():
     try:
         annexures = frappe.get_all(
             "Salary Annexure",
+            filters={"custom_print_format_template": ["is", "not set"]},
             fields=[
                 "name",
                 "custom_job_applicant",
@@ -652,7 +653,12 @@ def get_annexure_by_applicant(job_applicant):
                 "message": "Applicant is required",
             }
         annexure_name = frappe.db.get_value(
-            "Salary Annexure", {"custom_job_applicant": job_applicant}, "name"
+            "Salary Annexure",
+            {
+                "custom_job_applicant": job_applicant,
+                "custom_print_format_template": ["is", "not set"],
+            },
+            "name",
         )
         if not annexure_name:
             return {"success": True, "exists": False, "message": "No existing annexure"}

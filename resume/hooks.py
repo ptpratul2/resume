@@ -146,7 +146,7 @@ permission_query_conditions = {
     "Interview": "resume.api.permissions.interview_query",
     "Interview Feedback": "resume.api.permissions.interview_feedback_query",
     "Applicant Document": "resume.api.permissions.applicant_document_query",
-}
+}   
 
 # DocType Class
 # ---------------

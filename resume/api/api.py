@@ -88,6 +88,7 @@ def generate_document_link(applicant_name):
         subject="Upload Documents",
         message=f"""
             Hello {doc.applicant_name},<br><br>
+            Your designation is <b>{doc.designation or 'Not specified'}</b> at <b>Vaaman Engineers India Limited</b>.<br><br>
             Please upload your documents using link below:<br><br>
             <a href="{link}">Upload Documents</a>
         """,

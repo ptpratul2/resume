@@ -1234,3 +1234,160 @@ def set_candidate_share(name, user, read=0, write=0, share=0, submit=0):
         frappe.log_error(title="Set Candidate Share Error", message=frappe.get_traceback())
         return {"success": False, "message": str(e)}
 # ═════════════════════════════════════════════════════════════════════════════
+
+@frappe.whitelist()
+def get_candidates_with_stages(page=1, page_size=10, search="", status="all", designation="all", job_opening=""):
+    page = int(page)
+    page_size = int(page_size)
+    limit_start = (page - 1) * page_size
+    
+    # 1. Filters Setup
+    filters = {}
+    if status and status != "all":
+        filters["status"] = status
+    if designation and designation != "all":
+        filters["designation"] = designation
+    if job_opening:
+        filters["job_title"] = job_opening
+
+    or_filters = []
+    if search:
+        # 1. पहले Job Opening टेबल में सर्च करें कि कौन सी जॉब का टाइटल इस सर्च से मैच करता है
+        matching_job_openings = frappe.get_all(
+            "Job Opening",
+            filters=[["job_title", "like", f"%{search}%"]],
+            pluck="name",
+            limit_page_length=0
+        )
+        
+        or_filters = [
+            ["applicant_name", "like", f"%{search}%"],
+            ["email_id", "like", f"%{search}%"],
+            ["phone_number", "like", f"%{search}%"]
+        ]
+        
+        # 2. अगर कोई जॉब टाइटल मैच हुआ है, तो उसकी ID को सर्च में जोड़ें
+        if matching_job_openings:
+            or_filters.append(["job_title", "in", matching_job_openings])
+        else:
+            # अगर कोई टाइटल मैच नहीं हुआ, तो सीधे ID से मैच करने की कोशिश करें
+            or_filters.append(["job_title", "like", f"%{search}%"])
+
+    # 2. Fetch Candidates (Fields match exactly your frontend requirement)
+    fields = [
+        "name", "applicant_name", "email_id", "phone_number", "job_title", 
+        "designation", "status", "country", "location", "custom_location", 
+        "custom_address", "address", "source", "notes", "resume_link", 
+        "cover_letter", "creation", "modified", "resume_score", 
+        "custom_recruitment_stage", "justification_by_ai", "applicant_rating", 
+        "fit_level", "score", "custom_current_company", 
+        "custom_total_experience", "resume_attachment", "owner"
+    ]
+    
+    candidates = frappe.get_list(
+        "Job Applicant",
+        fields=fields,
+        filters=filters,
+        or_filters=or_filters,
+        limit_start=limit_start,
+        limit_page_length=page_size,
+        order_by="creation desc"
+    )
+    
+        # 1. पूरे फ़िल्टर किए गए डेटा के IDs निकालें (Stats के लिए जरुरी है)
+    all_candidate_ids = [d.name for d in frappe.get_all(
+        "Job Applicant",
+        filters=filters,
+        or_filters=or_filters,
+        fields=["name"],
+        limit_page_length=0
+    )]
+    total_count = len(all_candidate_ids)
+
+    # 2. पूरे डेटा के हिसाब से Stats निकालें
+    if all_candidate_ids:
+        pending_interview_count = frappe.db.count("Interview", filters={"job_applicant": ["in", all_candidate_ids], "status": "Pending"})
+        doc_verification_count = frappe.db.count("Applicant Document", filters={"applicant_name": ["in", all_candidate_ids]})
+        offer_letter_count = frappe.db.count("Job Offer", filters={"job_applicant": ["in", all_candidate_ids], "status": ["like", "%accept%"]})
+        joining_confirmation_count = frappe.db.count("Joining Confirmation", filters={"candidate_id": ["in", all_candidate_ids], "join": 1})
+        appointment_letter_count = frappe.db.count("Appointment Letter", filters={"job_applicant": ["in", all_candidate_ids]})
+        completed_count = appointment_letter_count
+    else:
+        pending_interview_count = 0
+        doc_verification_count = 0
+        offer_letter_count = 0
+        joining_confirmation_count = 0
+        appointment_letter_count = 0
+        completed_count = 0
+    
+    if not candidates:
+        return {"success": True, "data": [], "total_count": total_count, "pending_interview_count": 0}
+
+    candidate_ids = [c.name for c in candidates]
+
+    # 3. Bulk Fetch Stage Data (Only for the current page's 10 candidates)
+    interviews = frappe.get_all("Interview", filters={"job_applicant": ("in", candidate_ids)}, fields=["job_applicant", "status", "scheduled_on"])
+    feedbacks = frappe.get_all("Interview Feedback", filters={"job_applicant": ("in", candidate_ids)}, fields=["job_applicant"])
+    docs = frappe.get_all("Applicant Document", filters={"applicant_name": ("in", candidate_ids)}, fields=["applicant_name"])
+    offers = frappe.get_all("Job Offer", filters={"job_applicant": ("in", candidate_ids)}, fields=["job_applicant", "status"])
+    joinings = frappe.get_all("Joining Confirmation", filters={"candidate_id": ("in", candidate_ids)}, fields=["candidate_id", "join", "not_join", "offer_revoked", "modified", "custom_date_of_joining"])
+    appointments = frappe.get_all("Appointment Letter", filters={"job_applicant": ("in", candidate_ids)}, fields=["job_applicant"])
+
+    # 4. Merge Data
+    for c in candidates:
+        statuses = []
+        
+        # Interview
+        c_interviews = [i for i in interviews if i.job_applicant == c.name]
+        if c_interviews:
+            has_completed = any(i.status in ['Completed', 'Cleared'] for i in c_interviews)
+            statuses.append({"stage_id": "interview", "status": "completed" if has_completed else "in_progress"})
+        else:
+            statuses.append({"stage_id": "interview", "status": "pending"})
+
+        # Feedback
+        statuses.append({"stage_id": "feedback", "status": "completed" if any(f.job_applicant == c.name for f in feedbacks) else "pending"})
+        
+        # Doc Verification
+        statuses.append({"stage_id": "document_verification", "status": "completed" if any(d.applicant_name == c.name for d in docs) else "pending"})
+        
+        # Offer Letter
+        c_offer = next((o for o in offers if o.job_applicant == c.name), None)
+        offer_status = "pending"
+        if c_offer:
+            s = (c_offer.status or "").lower()
+            if "accept" in s: offer_status = "completed"
+            elif "reject" in s: offer_status = "rejected"
+            else: offer_status = "in_progress"
+        statuses.append({"stage_id": "offer_letter", "status": offer_status})
+        
+        # Joining
+        c_joining = next((j for j in joinings if j.candidate_id == c.name), None)
+        joining_status = "pending"
+        joining_date = ""
+        if c_joining:
+            if c_joining.join == 1: joining_status = "completed"
+            elif c_joining.offer_revoked == 1: joining_status = "rejected"
+            joining_date = c_joining.custom_date_of_joining or ""
+        statuses.append({"stage_id": "joining_confirmation", "status": joining_status, "completed_date": c_joining.modified if c_joining else None})
+        
+        # Appointment
+        statuses.append({"stage_id": "appointment_letter", "status": "completed" if any(a.job_applicant == c.name for a in appointments) else "pending"})
+
+        c["stage_statuses"] = statuses
+        c["custom_date_of_joining"] = joining_date
+        c["id"] = c.name # For frontend compatibility
+
+        return {
+        "success": True,
+        "data": candidates,
+        "total_count": total_count,
+        "stats": {
+            "pending_interview_count": pending_interview_count,
+            "doc_verification_count": doc_verification_count,
+            "completed_count": completed_count,
+            "offer_letter_count": offer_letter_count,
+            "joining_confirmation_count": joining_confirmation_count,
+            "appointment_letter_count": appointment_letter_count
+        }
+    }

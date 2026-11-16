@@ -1,5 +1,404 @@
+# import frappe
+# from frappe import _
+
+# @frappe.whitelist(allow_guest=True)
+# def get_accepted_job_offers():
+#     """Get list of job offers with Accepted status"""
+#     try:
+#         offers = frappe.get_all(
+#             "Job Offer",
+#             filters={"status": "Accepted"},
+#             fields=[
+#                 "name",
+#                 "job_applicant",
+#                 "applicant_name",
+#                 "applicant_email",
+#                 "designation",
+#                 "offer_date",
+#                 "company",
+#                 "status"
+#             ],
+#             order_by="modified desc"
+#         )
+#         return {
+#             "success": True,
+#             "data": offers
+#         }
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), _("Error fetching accepted offers"))
+#         return {
+#             "success": False,
+#             "message": str(e)
+#         }
+
+
+# @frappe.whitelist(allow_guest=True)
+# def get_job_applicant_details(job_applicant):
+#     """Get job applicant details"""
+#     try:
+#         applicant = frappe.get_doc("Job Applicant", job_applicant)
+#         return {
+#             "success": True,
+#             "data": {
+#                 "name": applicant.name,
+#                 "applicant_name": applicant.applicant_name,
+#                 "email_id": applicant.email_id,
+#                 "phone_number": applicant.phone_number,
+#                 "status": applicant.status
+#             }
+#         }
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), _("Error fetching applicant details"))
+#         return {
+#             "success": False,
+#             "message": str(e)
+#         }
+
+
+# @frappe.whitelist(allow_guest=True)
+# def get_appointment_letter_templates():
+#     """Get all appointment letter templates"""
+#     try:
+#         templates = frappe.get_all(
+#             "Appointment Letter Template",
+#             fields=["name", "introduction"],
+#             order_by="name"
+#         )
+#         return {
+#             "success": True,
+#             "data": templates
+#         }
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), _("Error fetching templates"))
+#         return {
+#             "success": False,
+#             "message": str(e)
+#         }
+
+
+# @frappe.whitelist(allow_guest=True)
+# def get_appointment_letter_template_details(template_name):
+#     """Get appointment letter template details with terms"""
+#     try:
+#         template = frappe.get_doc("Appointment Letter Template", template_name)
+#         terms = []
+#         if hasattr(template, 'terms'):
+#             for term in template.terms:
+#                 terms.append({
+#                     "title": term.title if hasattr(term, 'title') else term.get('title', ''),
+#                     "description": term.description if hasattr(term, 'description') else term.get('description', '')
+#                 })
+#         return {
+#             "success": True,
+#             "data": {
+#                 "name": template.name,
+#                 "introduction": template.introduction if hasattr(template, 'introduction') else '',
+#                 "closing_notes": template.closing_notes if hasattr(template, 'closing_notes') else '',
+#                 "terms": terms
+#             }
+#         }
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), _("Error fetching template details"))
+#         return {
+#             "success": False,
+#             "message": str(e)
+#         }
+
+
+# @frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Appointment Letter record create karta hai
+# def create_appointment_letter(data):
+#     """Create a new appointment letter"""
+#     try:
+#         import json
+#         if isinstance(data, str):
+#             data = json.loads(data)
+
+#         frappe.logger().info(f"Creating appointment letter with data: {data}")
+
+#         # Validate required fields
+#         if not data.get("job_applicant"):
+#             return {"success": False, "message": _("Job Applicant is required")}
+
+#         if not data.get("applicant_name"):
+#             return {"success": False, "message": _("Applicant Name is required")}
+
+#         # ✅ Validate Employee (mandatory link field)
+#         if not data.get("custom_employee"):
+#             return {
+#                 "success": False,
+#                 "message": _("Employee is required. Please create an Employee in Frappe first, then create the appointment letter.")
+#             }
+
+#         # ✅ Salary Annexure mandatory only for Staff, not Worker
+#         if data.get("custom_staffworker") != "Worker" and not data.get("custom_salary_annexure"):
+#             return {
+#                 "success": False,
+#                 "message": _("Salary Annexure is required for Staff. Please create a Salary Annexure in Frappe first, then create the appointment letter.")
+#             }
+
+#         if not data.get("appointment_date"):
+#             return {"success": False, "message": _("Appointment Date is required")}
+
+#         if not data.get("appointment_letter_template"):
+#             return {"success": False, "message": _("Template is required")}
+
+#         # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
+#         # Ye Appointment Letter doctype ka naya record create karta hai.
+#         if not frappe.has_permission("Appointment Letter", ptype="create"):
+#             return {"success": False, "message": _("You do not have permission to create Appointment Letter")}
+
+#         # ✅ Validate Employee exists in Frappe
+#         if not frappe.db.exists("Employee", data.get("custom_employee")):
+#             return {
+#                 "success": False,
+#                 "message": _("Employee '{0}' does not exist in Frappe. Please create the Employee first.").format(data.get("custom_employee"))
+#             }
+
+#        # ✅ Validate Salary Annexure exists only if provided
+#         if data.get("custom_salary_annexure") and not frappe.db.exists("Salary Annexure", data.get("custom_salary_annexure")):
+#             return {
+#                 "success": False,
+#                 "message": _("Salary Annexure '{0}' does not exist in Frappe. Please create it first.").format(data.get("custom_salary_annexure"))
+#             }
+
+#         # Check if appointment letter already exists for this job applicant
+#         existing = frappe.db.exists(
+#             "Appointment Letter",
+#             {"job_applicant": data.get("job_applicant")}
+#         )
+#         if existing:
+#             return {
+#                 "success": False,
+#                 "message": _("Appointment Letter already exists for this candidate")
+#             }
+
+#         # Create new Appointment Letter
+#         appointment = frappe.get_doc({
+#             "doctype": "Appointment Letter",
+#             "job_applicant": data.get("job_applicant"),
+#             "applicant_name": data.get("applicant_name"),
+#             "company": data.get("company"),
+#             "appointment_date": data.get("appointment_date"),
+#             "appointment_letter_template": data.get("appointment_letter_template"),
+#             "introduction": data.get("introduction", ""),
+#             "closing_notes": data.get("closing_notes", ""),
+#             "custom_monthly_gross_salary": data.get("custom_monthly_gross_salary", ""),
+#             "custom_employee": data.get("custom_employee") or "",
+#             "custom_salary_annexure": data.get("custom_salary_annexure") or "",
+#             "custom_branch": data.get("custom_branch") or "",
+#         })
+
+#         # Add terms
+#         terms_list = []
+#         for term in data.get("terms", []):
+#             if term.get("title") or term.get("description"):
+#                 appointment.append("terms", {
+#                     "title": term.get("title", ""),
+#                     "description": term.get("description", "")
+#                 })
+#                 terms_list.append({
+#                     "title": term.get("title", ""),
+#                     "description": term.get("description", "")
+#                 })
+
+#         appointment.insert(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
+#         frappe.db.commit()
+
+#         # ✅ Fetch custom_staffworker from Employee at creation time too
+#         custom_staffworker = ""
+#         custom_employee = data.get("custom_employee") or ""
+#         if custom_employee:
+#             custom_staffworker = frappe.db.get_value("Employee", custom_employee, "custom_staffworker") or ""
+#         frappe.logger().info(f"✅ custom_staffworker from Employee: {custom_staffworker}")
+
+#         return {
+#             "success": True,
+#             "message": _("Appointment Letter created successfully"),
+#             "data": {
+#                 "name": appointment.name,
+#                 "job_applicant": data.get("job_applicant"),
+#                 "applicant_name": data.get("applicant_name"),
+#                 "company": data.get("company"),
+#                 "appointment_date": data.get("appointment_date"),
+#                 "appointment_letter_template": data.get("appointment_letter_template"),
+#                 "introduction": data.get("introduction", ""),
+#                 "closing_notes": data.get("closing_notes", ""),
+#                 "terms": terms_list,
+#                 "custom_monthly_gross_salary": data.get("custom_monthly_gross_salary", ""),
+#                 "custom_employee": data.get("custom_employee") or "",
+#                 "custom_salary_annexure": data.get("custom_salary_annexure") or "",
+#                 "custom_branch": data.get("custom_branch") or "",
+#                 "custom_staffworker": custom_staffworker,
+#                 "owner": appointment.owner or "",
+#             }
+#         }
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), _("Error creating appointment letter"))
+#         frappe.db.rollback()
+#         return {
+#             "success": False,
+#             "message": str(e)
+#         }
+
+
+# @frappe.whitelist()
+# def get_appointment_letter_list():
+#     """Get list of all appointment letters"""
+#     try:
+#         letters = frappe.get_all(
+#             "Appointment Letter",
+#             fields=[
+#                 "name",
+#                 "job_applicant",
+#                 "applicant_name",
+#                 "company",
+#                 "appointment_date",
+#                 "status",
+#                 "modified"
+#             ],
+#             order_by="modified desc"
+#         )
+#         return {
+#             "success": True,
+#             "data": letters
+#         }
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), _("Error fetching appointment letters"))
+#         return {
+#             "success": False,
+#             "message": str(e)
+#         }
+
+
+# @frappe.whitelist()
+# def get_appointment_letter_details(appointment_letter_name):
+#     """Get appointment letter details"""
+#     try:
+#         letter = frappe.get_doc("Appointment Letter", appointment_letter_name)
+#         terms = []
+#         if hasattr(letter, 'terms'):
+#             for term in letter.terms:
+#                 terms.append({
+#                     "title": term.title if hasattr(term, 'title') else '',
+#                     "description": term.description if hasattr(term, 'description') else ''
+#                 })
+#         return {
+#             "success": True,
+#             "data": {
+#                 "name": letter.name,
+#                 "job_applicant": letter.job_applicant if hasattr(letter, 'job_applicant') else '',
+#                 "applicant_name": letter.applicant_name if hasattr(letter, 'applicant_name') else '',
+#                 "company": letter.company if hasattr(letter, 'company') else '',
+#                 "appointment_date": letter.appointment_date if hasattr(letter, 'appointment_date') else '',
+#                 "appointment_letter_template": letter.appointment_letter_template if hasattr(letter, 'appointment_letter_template') else '',
+#                 "introduction": letter.introduction if hasattr(letter, 'introduction') else '',
+#                 "closing_notes": letter.closing_notes if hasattr(letter, 'closing_notes') else '',
+#                 "terms": terms,
+#                 "status": letter.status if hasattr(letter, 'status') else '',
+#                 "custom_employee": letter.custom_employee if hasattr(letter, 'custom_employee') else '',
+#                 "custom_salary_annexure": letter.custom_salary_annexure if hasattr(letter, 'custom_salary_annexure') else '',
+#                 "custom_branch": letter.custom_branch if hasattr(letter, 'custom_branch') else '',
+#             }
+#         }
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), _("Error fetching appointment letter details"))
+#         return {
+#             "success": False,
+#             "message": str(e)
+#         }
+
+
+# @frappe.whitelist(allow_guest=True)
+# def check_appointment_letter_exists(job_applicant):
+#     """Check if appointment letter exists for a job applicant"""
+#     try:
+#         exists = frappe.db.exists(
+#             "Appointment Letter",
+#             {"job_applicant": job_applicant}
+#         )
+#         return {
+#             "success": True,
+#             "exists": bool(exists)
+#         }
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), _("Error checking appointment letter"))
+#         return {
+#             "success": False,
+#             "exists": False,
+#             "message": str(e)
+#         }
+
+
+# @frappe.whitelist(allow_guest=True)
+# def get_appointment_letter_by_job_applicant(job_applicant):
+#     """Get appointment letter details by job applicant"""
+#     try:
+#         letter_name = frappe.db.get_value(
+#             "Appointment Letter",
+#             {"job_applicant": job_applicant},
+#             "name"
+#         )
+#         if not letter_name:
+#             return {
+#                 "success": False,
+#                 "message": _("Appointment Letter not found")
+#             }
+
+#         letter = frappe.get_doc("Appointment Letter", letter_name)
+#         terms = []
+#         if hasattr(letter, 'terms'):
+#             for term in letter.terms:
+#                 terms.append({
+#                     "title": term.title if hasattr(term, 'title') else '',
+#                     "description": term.description if hasattr(term, 'description') else ''
+#                 })
+# # ✅ Fetch custom_employee and custom_salary_annexure from Appointment Letter
+#         al_custom = frappe.db.get_value(
+#             "Appointment Letter",
+#             letter.name,
+#             ["custom_employee", "custom_salary_annexure","custom_branch", "owner"],
+#             as_dict=True
+#         ) or {}
+
+#         # ✅ Fetch custom_staffworker from the linked Employee (not Appointment Letter)
+#         custom_staffworker = ""
+#         custom_employee = al_custom.get("custom_employee") or ""
+#         if custom_employee:
+#             custom_staffworker = frappe.db.get_value("Employee", custom_employee, "custom_staffworker") or ""
+
+#         frappe.logger().info(f"📄 custom_employee: {custom_employee}, custom_staffworker: {custom_staffworker}")
+
+#         return {
+#             "success": True,
+#             "data": {
+#                 "name": letter.name,
+#                 "job_applicant": letter.job_applicant if hasattr(letter, 'job_applicant') else '',
+#                 "applicant_name": letter.applicant_name if hasattr(letter, 'applicant_name') else '',
+#                 "company": letter.company if hasattr(letter, 'company') else '',
+#                 "appointment_date": str(letter.appointment_date) if letter.appointment_date else '',
+#                 "appointment_letter_template": letter.appointment_letter_template if hasattr(letter, 'appointment_letter_template') else '',
+#                 "introduction": letter.introduction if hasattr(letter, 'introduction') else '',
+#                 "closing_notes": letter.closing_notes if hasattr(letter, 'closing_notes') else '',
+#                 "terms": terms,
+#                 "status": letter.status if hasattr(letter, 'status') else '',
+#                 "custom_employee": custom_employee,
+#                 "custom_salary_annexure": al_custom.get("custom_salary_annexure") or "",
+#                 "custom_branch": al_custom.get("custom_branch") or "",
+#                 "custom_staffworker": custom_staffworker,  # ✅ from Employee doc
+#                 "owner": al_custom.get("owner") or letter.owner or "",
+#             }
+#         }
+#     except Exception as e:
+#         frappe.log_error(frappe.get_traceback(), _("Error fetching appointment letter by job applicant"))
+#         return {
+#             "success": False,
+#             "message": str(e)
+#         }
+
+
 import frappe
 from frappe import _
+
 
 @frappe.whitelist(allow_guest=True)
 def get_accepted_job_offers():
@@ -16,20 +415,14 @@ def get_accepted_job_offers():
                 "designation",
                 "offer_date",
                 "company",
-                "status"
+                "status",
             ],
-            order_by="modified desc"
+            order_by="modified desc",
         )
-        return {
-            "success": True,
-            "data": offers
-        }
+        return {"success": True, "data": offers}
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), _("Error fetching accepted offers"))
-        return {
-            "success": False,
-            "message": str(e)
-        }
+        return {"success": False, "message": str(e)}
 
 
 @frappe.whitelist(allow_guest=True)
@@ -44,15 +437,12 @@ def get_job_applicant_details(job_applicant):
                 "applicant_name": applicant.applicant_name,
                 "email_id": applicant.email_id,
                 "phone_number": applicant.phone_number,
-                "status": applicant.status
-            }
+                "status": applicant.status,
+            },
         }
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), _("Error fetching applicant details"))
-        return {
-            "success": False,
-            "message": str(e)
-        }
+        return {"success": False, "message": str(e)}
 
 
 @frappe.whitelist(allow_guest=True)
@@ -62,18 +452,12 @@ def get_appointment_letter_templates():
         templates = frappe.get_all(
             "Appointment Letter Template",
             fields=["name", "introduction"],
-            order_by="name"
+            order_by="name",
         )
-        return {
-            "success": True,
-            "data": templates
-        }
+        return {"success": True, "data": templates}
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), _("Error fetching templates"))
-        return {
-            "success": False,
-            "message": str(e)
-        }
+        return {"success": False, "message": str(e)}
 
 
 @frappe.whitelist(allow_guest=True)
@@ -82,27 +466,38 @@ def get_appointment_letter_template_details(template_name):
     try:
         template = frappe.get_doc("Appointment Letter Template", template_name)
         terms = []
-        if hasattr(template, 'terms'):
+        if hasattr(template, "terms"):
             for term in template.terms:
-                terms.append({
-                    "title": term.title if hasattr(term, 'title') else term.get('title', ''),
-                    "description": term.description if hasattr(term, 'description') else term.get('description', '')
-                })
+                terms.append(
+                    {
+                        "title": (
+                            term.title
+                            if hasattr(term, "title")
+                            else term.get("title", "")
+                        ),
+                        "description": (
+                            term.description
+                            if hasattr(term, "description")
+                            else term.get("description", "")
+                        ),
+                    }
+                )
         return {
             "success": True,
             "data": {
                 "name": template.name,
-                "introduction": template.introduction if hasattr(template, 'introduction') else '',
-                "closing_notes": template.closing_notes if hasattr(template, 'closing_notes') else '',
-                "terms": terms
-            }
+                "introduction": (
+                    template.introduction if hasattr(template, "introduction") else ""
+                ),
+                "closing_notes": (
+                    template.closing_notes if hasattr(template, "closing_notes") else ""
+                ),
+                "terms": terms,
+            },
         }
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), _("Error fetching template details"))
-        return {
-            "success": False,
-            "message": str(e)
-        }
+        return {"success": False, "message": str(e)}
 
 
 @frappe.whitelist()  # CHANGED: allow_guest=True hataya — ye function Appointment Letter record create karta hai
@@ -110,6 +505,7 @@ def create_appointment_letter(data):
     """Create a new appointment letter"""
     try:
         import json
+
         if isinstance(data, str):
             data = json.loads(data)
 
@@ -126,14 +522,29 @@ def create_appointment_letter(data):
         if not data.get("custom_employee"):
             return {
                 "success": False,
-                "message": _("Employee is required. Please create an Employee in Frappe first, then create the appointment letter.")
+                "message": _(
+                    "Employee is required. Please create an Employee in Frappe first, then create the appointment letter."
+                ),
+            }
+
+        # ✅ Worker ke liye Appointment Letter Worker Format mandatory
+        if data.get("custom_staffworker") == "Worker" and not data.get(
+            "custom_appointment_letter_worker_format"
+        ):
+            return {
+                "success": False,
+                "message": _("Appointment Letter Worker Format is required for Worker"),
             }
 
         # ✅ Salary Annexure mandatory only for Staff, not Worker
-        if data.get("custom_staffworker") != "Worker" and not data.get("custom_salary_annexure"):
+        if data.get("custom_staffworker") != "Worker" and not data.get(
+            "custom_salary_annexure"
+        ):
             return {
                 "success": False,
-                "message": _("Salary Annexure is required for Staff. Please create a Salary Annexure in Frappe first, then create the appointment letter.")
+                "message": _(
+                    "Salary Annexure is required for Staff. Please create a Salary Annexure in Frappe first, then create the appointment letter."
+                ),
             }
 
         if not data.get("appointment_date"):
@@ -145,71 +556,101 @@ def create_appointment_letter(data):
         # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
         # Ye Appointment Letter doctype ka naya record create karta hai.
         if not frappe.has_permission("Appointment Letter", ptype="create"):
-            return {"success": False, "message": _("You do not have permission to create Appointment Letter")}
+            return {
+                "success": False,
+                "message": _("You do not have permission to create Appointment Letter"),
+            }
 
         # ✅ Validate Employee exists in Frappe
         if not frappe.db.exists("Employee", data.get("custom_employee")):
             return {
                 "success": False,
-                "message": _("Employee '{0}' does not exist in Frappe. Please create the Employee first.").format(data.get("custom_employee"))
+                "message": _(
+                    "Employee '{0}' does not exist in Frappe. Please create the Employee first."
+                ).format(data.get("custom_employee")),
             }
 
-       # ✅ Validate Salary Annexure exists only if provided
-        if data.get("custom_salary_annexure") and not frappe.db.exists("Salary Annexure", data.get("custom_salary_annexure")):
+        # ✅ Validate Salary Annexure exists only if provided
+        if data.get("custom_salary_annexure") and not frappe.db.exists(
+            "Salary Annexure",
+            data.get("custom_salary_annexure"),
+            "custom_print_format_template",
+        ):
             return {
                 "success": False,
-                "message": _("Salary Annexure '{0}' does not exist in Frappe. Please create it first.").format(data.get("custom_salary_annexure"))
+                "message": _(
+                    "Salary Annexure '{0}' is a Print Format Template annexure and cannot be used for Appointment Letter."
+                ).format(data.get("custom_salary_annexure")),
             }
 
         # Check if appointment letter already exists for this job applicant
         existing = frappe.db.exists(
-            "Appointment Letter",
-            {"job_applicant": data.get("job_applicant")}
+            "Appointment Letter", {"job_applicant": data.get("job_applicant")}
         )
         if existing:
             return {
                 "success": False,
-                "message": _("Appointment Letter already exists for this candidate")
+                "message": _("Appointment Letter already exists for this candidate"),
             }
 
         # Create new Appointment Letter
-        appointment = frappe.get_doc({
-            "doctype": "Appointment Letter",
-            "job_applicant": data.get("job_applicant"),
-            "applicant_name": data.get("applicant_name"),
-            "company": data.get("company"),
-            "appointment_date": data.get("appointment_date"),
-            "appointment_letter_template": data.get("appointment_letter_template"),
-            "introduction": data.get("introduction", ""),
-            "closing_notes": data.get("closing_notes", ""),
-            "custom_monthly_gross_salary": data.get("custom_monthly_gross_salary", ""),
-            "custom_employee": data.get("custom_employee") or "",
-            "custom_salary_annexure": data.get("custom_salary_annexure") or "",
-            "custom_branch": data.get("custom_branch") or "",
-        })
+        appointment = frappe.get_doc(
+            {
+                "doctype": "Appointment Letter",
+                "job_applicant": data.get("job_applicant"),
+                "applicant_name": data.get("applicant_name"),
+                "company": data.get("company"),
+                "appointment_date": data.get("appointment_date"),
+                "appointment_letter_template": data.get("appointment_letter_template"),
+                "introduction": data.get("introduction", ""),
+                "closing_notes": data.get("closing_notes", ""),
+                "custom_monthly_gross_salary": data.get(
+                    "custom_monthly_gross_salary", ""
+                ),
+                "custom_employee": data.get("custom_employee") or "",
+                "custom_salary_annexure": data.get("custom_salary_annexure") or "",
+                "custom_branch": data.get("custom_branch") or "",
+                "custom_appointment_letter_worker_format": data.get(
+                    "custom_appointment_letter_worker_format"
+                )
+                or "",
+            }
+        )
 
         # Add terms
         terms_list = []
         for term in data.get("terms", []):
             if term.get("title") or term.get("description"):
-                appointment.append("terms", {
-                    "title": term.get("title", ""),
-                    "description": term.get("description", "")
-                })
-                terms_list.append({
-                    "title": term.get("title", ""),
-                    "description": term.get("description", "")
-                })
+                appointment.append(
+                    "terms",
+                    {
+                        "title": term.get("title", ""),
+                        "description": term.get("description", ""),
+                    },
+                )
+                terms_list.append(
+                    {
+                        "title": term.get("title", ""),
+                        "description": term.get("description", ""),
+                    }
+                )
 
-        appointment.insert(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
+        appointment.insert(
+            ignore_permissions=False
+        )  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
 
         # ✅ Fetch custom_staffworker from Employee at creation time too
         custom_staffworker = ""
         custom_employee = data.get("custom_employee") or ""
         if custom_employee:
-            custom_staffworker = frappe.db.get_value("Employee", custom_employee, "custom_staffworker") or ""
-        frappe.logger().info(f"✅ custom_staffworker from Employee: {custom_staffworker}")
+            custom_staffworker = (
+                frappe.db.get_value("Employee", custom_employee, "custom_staffworker")
+                or ""
+            )
+        frappe.logger().info(
+            f"✅ custom_staffworker from Employee: {custom_staffworker}"
+        )
 
         return {
             "success": True,
@@ -224,21 +665,24 @@ def create_appointment_letter(data):
                 "introduction": data.get("introduction", ""),
                 "closing_notes": data.get("closing_notes", ""),
                 "terms": terms_list,
-                "custom_monthly_gross_salary": data.get("custom_monthly_gross_salary", ""),
+                "custom_monthly_gross_salary": data.get(
+                    "custom_monthly_gross_salary", ""
+                ),
                 "custom_employee": data.get("custom_employee") or "",
                 "custom_salary_annexure": data.get("custom_salary_annexure") or "",
                 "custom_branch": data.get("custom_branch") or "",
-                "custom_staffworker": custom_staffworker,  
+                "custom_appointment_letter_worker_format": data.get(
+                    "custom_appointment_letter_worker_format"
+                )
+                or "",
+                "custom_staffworker": custom_staffworker,
                 "owner": appointment.owner or "",
-            }
+            },
         }
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), _("Error creating appointment letter"))
         frappe.db.rollback()
-        return {
-            "success": False,
-            "message": str(e)
-        }
+        return {"success": False, "message": str(e)}
 
 
 @frappe.whitelist()
@@ -254,20 +698,16 @@ def get_appointment_letter_list():
                 "company",
                 "appointment_date",
                 "status",
-                "modified"
+                "modified",
             ],
-            order_by="modified desc"
+            order_by="modified desc",
         )
-        return {
-            "success": True,
-            "data": letters
-        }
+        return {"success": True, "data": letters}
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), _("Error fetching appointment letters"))
-        return {
-            "success": False,
-            "message": str(e)
-        }
+        frappe.log_error(
+            frappe.get_traceback(), _("Error fetching appointment letters")
+        )
+        return {"success": False, "message": str(e)}
 
 
 @frappe.whitelist()
@@ -276,36 +716,63 @@ def get_appointment_letter_details(appointment_letter_name):
     try:
         letter = frappe.get_doc("Appointment Letter", appointment_letter_name)
         terms = []
-        if hasattr(letter, 'terms'):
+        if hasattr(letter, "terms"):
             for term in letter.terms:
-                terms.append({
-                    "title": term.title if hasattr(term, 'title') else '',
-                    "description": term.description if hasattr(term, 'description') else ''
-                })
+                terms.append(
+                    {
+                        "title": term.title if hasattr(term, "title") else "",
+                        "description": (
+                            term.description if hasattr(term, "description") else ""
+                        ),
+                    }
+                )
         return {
             "success": True,
             "data": {
                 "name": letter.name,
-                "job_applicant": letter.job_applicant if hasattr(letter, 'job_applicant') else '',
-                "applicant_name": letter.applicant_name if hasattr(letter, 'applicant_name') else '',
-                "company": letter.company if hasattr(letter, 'company') else '',
-                "appointment_date": letter.appointment_date if hasattr(letter, 'appointment_date') else '',
-                "appointment_letter_template": letter.appointment_letter_template if hasattr(letter, 'appointment_letter_template') else '',
-                "introduction": letter.introduction if hasattr(letter, 'introduction') else '',
-                "closing_notes": letter.closing_notes if hasattr(letter, 'closing_notes') else '',
+                "job_applicant": (
+                    letter.job_applicant if hasattr(letter, "job_applicant") else ""
+                ),
+                "applicant_name": (
+                    letter.applicant_name if hasattr(letter, "applicant_name") else ""
+                ),
+                "company": letter.company if hasattr(letter, "company") else "",
+                "appointment_date": (
+                    letter.appointment_date
+                    if hasattr(letter, "appointment_date")
+                    else ""
+                ),
+                "appointment_letter_template": (
+                    letter.appointment_letter_template
+                    if hasattr(letter, "appointment_letter_template")
+                    else ""
+                ),
+                "introduction": (
+                    letter.introduction if hasattr(letter, "introduction") else ""
+                ),
+                "closing_notes": (
+                    letter.closing_notes if hasattr(letter, "closing_notes") else ""
+                ),
                 "terms": terms,
-                "status": letter.status if hasattr(letter, 'status') else '',
-                "custom_employee": letter.custom_employee if hasattr(letter, 'custom_employee') else '',
-                "custom_salary_annexure": letter.custom_salary_annexure if hasattr(letter, 'custom_salary_annexure') else '',
-                "custom_branch": letter.custom_branch if hasattr(letter, 'custom_branch') else '',
-            }
+                "status": letter.status if hasattr(letter, "status") else "",
+                "custom_employee": (
+                    letter.custom_employee if hasattr(letter, "custom_employee") else ""
+                ),
+                "custom_salary_annexure": (
+                    letter.custom_salary_annexure
+                    if hasattr(letter, "custom_salary_annexure")
+                    else ""
+                ),
+                "custom_branch": (
+                    letter.custom_branch if hasattr(letter, "custom_branch") else ""
+                ),
+            },
         }
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), _("Error fetching appointment letter details"))
-        return {
-            "success": False,
-            "message": str(e)
-        }
+        frappe.log_error(
+            frappe.get_traceback(), _("Error fetching appointment letter details")
+        )
+        return {"success": False, "message": str(e)}
 
 
 @frappe.whitelist(allow_guest=True)
@@ -313,20 +780,12 @@ def check_appointment_letter_exists(job_applicant):
     """Check if appointment letter exists for a job applicant"""
     try:
         exists = frappe.db.exists(
-            "Appointment Letter",
-            {"job_applicant": job_applicant}
+            "Appointment Letter", {"job_applicant": job_applicant}
         )
-        return {
-            "success": True,
-            "exists": bool(exists)
-        }
+        return {"success": True, "exists": bool(exists)}
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), _("Error checking appointment letter"))
-        return {
-            "success": False,
-            "exists": False,
-            "message": str(e)
-        }
+        return {"success": False, "exists": False, "message": str(e)}
 
 
 @frappe.whitelist(allow_guest=True)
@@ -334,64 +793,112 @@ def get_appointment_letter_by_job_applicant(job_applicant):
     """Get appointment letter details by job applicant"""
     try:
         letter_name = frappe.db.get_value(
-            "Appointment Letter",
-            {"job_applicant": job_applicant},
-            "name"
+            "Appointment Letter", {"job_applicant": job_applicant}, "name"
         )
         if not letter_name:
-            return {
-                "success": False,
-                "message": _("Appointment Letter not found")
-            }
+            return {"success": False, "message": _("Appointment Letter not found")}
 
         letter = frappe.get_doc("Appointment Letter", letter_name)
         terms = []
-        if hasattr(letter, 'terms'):
+        if hasattr(letter, "terms"):
             for term in letter.terms:
-                terms.append({
-                    "title": term.title if hasattr(term, 'title') else '',
-                    "description": term.description if hasattr(term, 'description') else ''
-                })
-# ✅ Fetch custom_employee and custom_salary_annexure from Appointment Letter
-        al_custom = frappe.db.get_value(
-            "Appointment Letter",
-            letter.name,
-            ["custom_employee", "custom_salary_annexure","custom_branch", "owner"],
-            as_dict=True
-        ) or {}
+                terms.append(
+                    {
+                        "title": term.title if hasattr(term, "title") else "",
+                        "description": (
+                            term.description if hasattr(term, "description") else ""
+                        ),
+                    }
+                )
+        # ✅ Fetch custom_employee and custom_salary_annexure from Appointment Letter
+        al_custom = (
+            frappe.db.get_value(
+                "Appointment Letter",
+                letter.name,
+                [
+                    "custom_employee",
+                    "custom_salary_annexure",
+                    "custom_branch",
+                    "custom_appointment_letter_worker_format",
+                    "owner",
+                ],
+                as_dict=True,
+            )
+            or {}
+        )
 
         # ✅ Fetch custom_staffworker from the linked Employee (not Appointment Letter)
         custom_staffworker = ""
         custom_employee = al_custom.get("custom_employee") or ""
         if custom_employee:
-            custom_staffworker = frappe.db.get_value("Employee", custom_employee, "custom_staffworker") or ""
+            custom_staffworker = (
+                frappe.db.get_value("Employee", custom_employee, "custom_staffworker")
+                or ""
+            )
 
-        frappe.logger().info(f"📄 custom_employee: {custom_employee}, custom_staffworker: {custom_staffworker}")
+        frappe.logger().info(
+            f"📄 custom_employee: {custom_employee}, custom_staffworker: {custom_staffworker}"
+        )
 
         return {
             "success": True,
             "data": {
                 "name": letter.name,
-                "job_applicant": letter.job_applicant if hasattr(letter, 'job_applicant') else '',
-                "applicant_name": letter.applicant_name if hasattr(letter, 'applicant_name') else '',
-                "company": letter.company if hasattr(letter, 'company') else '',
-                "appointment_date": str(letter.appointment_date) if letter.appointment_date else '',
-                "appointment_letter_template": letter.appointment_letter_template if hasattr(letter, 'appointment_letter_template') else '',
-                "introduction": letter.introduction if hasattr(letter, 'introduction') else '',
-                "closing_notes": letter.closing_notes if hasattr(letter, 'closing_notes') else '',
+                "job_applicant": (
+                    letter.job_applicant if hasattr(letter, "job_applicant") else ""
+                ),
+                "applicant_name": (
+                    letter.applicant_name if hasattr(letter, "applicant_name") else ""
+                ),
+                "company": letter.company if hasattr(letter, "company") else "",
+                "appointment_date": (
+                    str(letter.appointment_date) if letter.appointment_date else ""
+                ),
+                "appointment_letter_template": (
+                    letter.appointment_letter_template
+                    if hasattr(letter, "appointment_letter_template")
+                    else ""
+                ),
+                "introduction": (
+                    letter.introduction if hasattr(letter, "introduction") else ""
+                ),
+                "closing_notes": (
+                    letter.closing_notes if hasattr(letter, "closing_notes") else ""
+                ),
                 "terms": terms,
-                "status": letter.status if hasattr(letter, 'status') else '',
+                "status": letter.status if hasattr(letter, "status") else "",
                 "custom_employee": custom_employee,
                 "custom_salary_annexure": al_custom.get("custom_salary_annexure") or "",
                 "custom_branch": al_custom.get("custom_branch") or "",
+                "custom_appointment_letter_worker_format": al_custom.get(
+                    "custom_appointment_letter_worker_format"
+                )
+                or "",
                 "custom_staffworker": custom_staffworker,  # ✅ from Employee doc
-                "owner": al_custom.get("owner") or letter.owner or "", 
-            }
+                "owner": al_custom.get("owner") or letter.owner or "",
+            },
         }
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), _("Error fetching appointment letter by job applicant"))
-        return {
-            "success": False,
-            "message": str(e)
-        }
+        frappe.log_error(
+            frappe.get_traceback(),
+            _("Error fetching appointment letter by job applicant"),
+        )
+        return {"success": False, "message": str(e)}
 
+
+@frappe.whitelist()
+def get_worker_format_options():
+    """Get options of Appointment Letter Worker Format field (dynamic from Frappe)"""
+    try:
+        field = frappe.get_meta("Appointment Letter").get_field(
+            "custom_appointment_letter_worker_format"
+        )
+        options = []
+        if field and field.options:
+            options = [o.strip() for o in field.options.split("\n") if o.strip()]
+        return {"success": True, "data": options}
+    except Exception as e:
+        frappe.log_error(
+            frappe.get_traceback(), _("Error fetching worker format options")
+        )
+        return {"success": False, "message": str(e)}

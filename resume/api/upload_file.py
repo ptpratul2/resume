@@ -1302,5 +1302,3 @@ def create_applicant_document(data):
         frappe.log_error(frappe.get_traceback(), "Create Applicant Document Error")
         frappe.db.rollback()
         return {"status": "error", "message": str(e)} 
-
-       
