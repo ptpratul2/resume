@@ -9,15 +9,16 @@ from resume.resume.doctype.pdf_upload.pdf_upload import _call_gemini_with_retry
 
 # Define recruitment stages - UPDATED WITH JOINING CONFIRMATION
 RECRUITMENT_STAGES = [
-    {'id': 'interview', 'label': 'Interview', 'order': 1},
-    {'id': 'feedback', 'label': 'Candidate Feedback', 'order': 2},
-    {'id': 'document_verification', 'label': 'Document Verification', 'order': 3},
-    {'id': 'offer_letter', 'label': 'Offer Letter', 'order': 4},
-    {'id': 'joining_confirmation', 'label': 'Joining Confirmation', 'order': 5},
-    {'id': 'appointment_letter', 'label': 'Appointment Letter', 'order': 6},
+    {"id": "interview", "label": "Interview", "order": 1},
+    {"id": "feedback", "label": "Candidate Feedback", "order": 2},
+    {"id": "document_verification", "label": "Document Verification", "order": 3},
+    {"id": "offer_letter", "label": "Offer Letter", "order": 4},
+    {"id": "joining_confirmation", "label": "Joining Confirmation", "order": 5},
+    {"id": "appointment_letter", "label": "Appointment Letter", "order": 6},
 ]
 
-@frappe.whitelist(allow_guest=True) 
+
+@frappe.whitelist(allow_guest=True)
 def get_all_candidates():
     """Get list of all job applicants with complete details including stage tracking"""
     try:
@@ -49,27 +50,27 @@ def get_all_candidates():
                 "fit_level",
                 "score",
                 "custom_comments",
-                "custom_current_company",    
-                "custom_total_experience",  
+                "custom_current_company",
+                "custom_total_experience",
                 "resume_attachment",
-                "owner",   
+                "owner",
             ],
             order_by="creation desc",
-            limit_page_length=0
+            limit_page_length=0,
         )
-        
+
         # Enrich with stage statuses
         for candidate in candidates:
             candidate["stage_statuses"] = get_candidate_stage_statuses(candidate.name)
-        
+
         frappe.log(f"Fetched {len(candidates)} candidates with stage tracking")
-        
+
         return {
             "message": "Candidates fetched successfully",
             "data": candidates,
-            "total": len(candidates)
+            "total": len(candidates),
         }
-        
+
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Candidates Fetch Failed")
         frappe.throw(f"Failed to fetch candidates: {str(e)}")
@@ -78,216 +79,316 @@ def get_all_candidates():
 def get_candidate_stage_statuses(candidate_id):
     """Get stage statuses for a candidate - UPDATED WITH JOINING CONFIRMATION"""
     statuses = []
-    
+
     try:
         # Stage 1: Interview
         interviews = frappe.get_all(
             "Interview",
             filters={"job_applicant": candidate_id},
             fields=["status", "scheduled_on", "from_time", "to_time"],
-            order_by="scheduled_on desc"
+            order_by="scheduled_on desc",
         )
-        
+
         if interviews:
             latest_interview = interviews[0]
             if latest_interview.status in ["Completed", "Cleared"]:
-                statuses.append({
-                    "stage_id": "interview",
-                    "status": "completed",
-                    "completed_date": latest_interview.scheduled_on,
-                    "notes": f"Interview status: {latest_interview.status}"
-                })
+                statuses.append(
+                    {
+                        "stage_id": "interview",
+                        "status": "completed",
+                        "completed_date": latest_interview.scheduled_on,
+                        "notes": f"Interview status: {latest_interview.status}",
+                    }
+                )
             elif latest_interview.status == "Rejected":
-                statuses.append({
-                    "stage_id": "interview",
-                    "status": "rejected",
-                    "completed_date": latest_interview.scheduled_on,
-                    "notes": "Interview rejected"
-                })
+                statuses.append(
+                    {
+                        "stage_id": "interview",
+                        "status": "rejected",
+                        "completed_date": latest_interview.scheduled_on,
+                        "notes": "Interview rejected",
+                    }
+                )
             else:
-                statuses.append({
-                    "stage_id": "interview",
-                    "status": "in_progress",
-                    "notes": f"Interview scheduled for {latest_interview.scheduled_on}"
-                })
+                statuses.append(
+                    {
+                        "stage_id": "interview",
+                        "status": "in_progress",
+                        "notes": f"Interview scheduled for {latest_interview.scheduled_on}",
+                    }
+                )
         else:
-            statuses.append({
-                "stage_id": "interview",
-                "status": "pending",
-                "notes": "No interview scheduled yet"
-            })
-        
+            statuses.append(
+                {
+                    "stage_id": "interview",
+                    "status": "pending",
+                    "notes": "No interview scheduled yet",
+                }
+            )
+
         # Stage 2: Feedback
         feedbacks = frappe.get_all(
             "Interview Feedback",
             filters={"job_applicant": candidate_id},
             fields=["creation", "result"],
-            order_by="creation desc"
+            order_by="creation desc",
         )
-        
+
         if feedbacks:
             latest_feedback = feedbacks[0]
-            statuses.append({
-                "stage_id": "feedback",
-                "status": "completed",
-                "completed_date": latest_feedback.creation,
-                "notes": f"Feedback result: {latest_feedback.get('result', 'Submitted')}"
-            })
+            statuses.append(
+                {
+                    "stage_id": "feedback",
+                    "status": "completed",
+                    "completed_date": latest_feedback.creation,
+                    "notes": f"Feedback result: {latest_feedback.get('result', 'Submitted')}",
+                }
+            )
         else:
-            interview_completed = any(s for s in statuses if s["stage_id"] == "interview" and s["status"] == "completed")
-            statuses.append({
-                "stage_id": "feedback",
-                "status": "in_progress" if interview_completed else "pending",
-                "notes": "Awaiting feedback" if interview_completed else "Complete interview first"
-            })
-        
+            interview_completed = any(
+                s
+                for s in statuses
+                if s["stage_id"] == "interview" and s["status"] == "completed"
+            )
+            statuses.append(
+                {
+                    "stage_id": "feedback",
+                    "status": "in_progress" if interview_completed else "pending",
+                    "notes": (
+                        "Awaiting feedback"
+                        if interview_completed
+                        else "Complete interview first"
+                    ),
+                }
+            )
+
         # Stage 3: Document Verification
         documents = frappe.get_all(
             "Applicant Document",
             filters={"applicant_name": candidate_id},
-            fields=["name", "creation", "aadhar_card", "pan", "education", "experience", "bank_details"],
-            limit=1
+            fields=[
+                "name",
+                "creation",
+                "aadhar_card",
+                "pan",
+                "education",
+                "experience",
+                "bank_details",
+            ],
+            limit=1,
         )
-        
+
         if documents:
             doc = documents[0]
-            mandatory_docs = ['aadhar_card', 'pan', 'education', 'experience', 'bank_details']
+            mandatory_docs = [
+                "aadhar_card",
+                "pan",
+                "education",
+                "experience",
+                "bank_details",
+            ]
             uploaded_count = sum(1 for field in mandatory_docs if doc.get(field))
-            
+
             if uploaded_count == len(mandatory_docs):
-                statuses.append({
-                    "stage_id": "document_verification",
-                    "status": "completed",
-                    "completed_date": doc.creation,
-                    "notes": "All mandatory documents uploaded and verified"
-                })
+                statuses.append(
+                    {
+                        "stage_id": "document_verification",
+                        "status": "completed",
+                        "completed_date": doc.creation,
+                        "notes": "All mandatory documents uploaded and verified",
+                    }
+                )
             else:
-                statuses.append({
-                    "stage_id": "document_verification",
-                    "status": "in_progress",
-                    "notes": f"{uploaded_count}/{len(mandatory_docs)} mandatory documents uploaded"
-                })
+                statuses.append(
+                    {
+                        "stage_id": "document_verification",
+                        "status": "in_progress",
+                        "notes": f"{uploaded_count}/{len(mandatory_docs)} mandatory documents uploaded",
+                    }
+                )
         else:
-            feedback_completed = any(s for s in statuses if s["stage_id"] == "feedback" and s["status"] == "completed")
-            statuses.append({
-                "stage_id": "document_verification",
-                "status": "in_progress" if feedback_completed else "pending",
-                "notes": "No documents uploaded yet" if feedback_completed else "Complete previous stages first"
-            })
-        
-                # Stage 4: Offer Letter
+            feedback_completed = any(
+                s
+                for s in statuses
+                if s["stage_id"] == "feedback" and s["status"] == "completed"
+            )
+            statuses.append(
+                {
+                    "stage_id": "document_verification",
+                    "status": "in_progress" if feedback_completed else "pending",
+                    "notes": (
+                        "No documents uploaded yet"
+                        if feedback_completed
+                        else "Complete previous stages first"
+                    ),
+                }
+            )
+
+            # Stage 4: Offer Letter
         offers = frappe.get_all(
             "Job Offer",
             filters={"job_applicant": candidate_id},
             fields=["name", "creation", "status", "offer_date"],
             order_by="creation desc",
-            limit=1
+            limit=1,
         )
-        
+
         if offers:
             offer = offers[0]
             offer_status_raw = (offer.status or "").lower()
-            
+
             if "accept" in offer_status_raw:
                 offer_stage_status = "completed"
             elif "reject" in offer_status_raw:
                 offer_stage_status = "rejected"
             else:
                 offer_stage_status = "in_progress"  # e.g. Awaiting Response / Draft
-            
-            statuses.append({
-                "stage_id": "offer_letter",
-                "status": offer_stage_status,
-                "completed_date": offer.offer_date or offer.creation,
-                "notes": f"Offer status: {offer.status}"
-            })
+
+            statuses.append(
+                {
+                    "stage_id": "offer_letter",
+                    "status": offer_stage_status,
+                    "completed_date": offer.offer_date or offer.creation,
+                    "notes": f"Offer status: {offer.status}",
+                }
+            )
         else:
-            doc_completed = any(s for s in statuses if s["stage_id"] == "document_verification" and s["status"] == "completed")
-            statuses.append({
-                "stage_id": "offer_letter",
-                "status": "in_progress" if doc_completed else "pending",
-                "notes": "Ready to send offer" if doc_completed else "Complete document verification first"
-            })
-        
+            doc_completed = any(
+                s
+                for s in statuses
+                if s["stage_id"] == "document_verification"
+                and s["status"] == "completed"
+            )
+            statuses.append(
+                {
+                    "stage_id": "offer_letter",
+                    "status": "in_progress" if doc_completed else "pending",
+                    "notes": (
+                        "Ready to send offer"
+                        if doc_completed
+                        else "Complete document verification first"
+                    ),
+                }
+            )
+
         # NEW: Stage 5: Joining Confirmation
         joining_records = frappe.get_all(
             "Joining Confirmation",
             filters={"candidate_id": candidate_id},
-            fields=["name", "join", "not_join", "offer_revoked", "modified", "custom_date_of_joining"],
+            fields=[
+                "name",
+                "join",
+                "not_join",
+                "offer_revoked",
+                "modified",
+                "custom_date_of_joining",
+            ],
             order_by="modified desc",
-            limit=1
+            limit=1,
         )
-        
+
         if joining_records:
             joining = joining_records[0]
-            
+
             if joining.get("join") == 1:
-                statuses.append({
-                    "stage_id": "joining_confirmation",
-                    "status": "completed",
-                    "completed_date": joining.modified,
-                    "date_of_joining": joining.get("custom_date_of_joining"),
-                    "notes": "Candidate confirmed joining"
-                })
+                statuses.append(
+                    {
+                        "stage_id": "joining_confirmation",
+                        "status": "completed",
+                        "completed_date": joining.modified,
+                        "date_of_joining": joining.get("custom_date_of_joining"),
+                        "notes": "Candidate confirmed joining",
+                    }
+                )
             elif joining.get("not_join") == 1:
-                statuses.append({
-                    "stage_id": "joining_confirmation",
-                    "status": "pending",
-                    "completed_date": joining.modified,
-                    "date_of_joining": joining.get("custom_date_of_joining"),
-                    "notes": "Candidate declined offer"
-                })
+                statuses.append(
+                    {
+                        "stage_id": "joining_confirmation",
+                        "status": "pending",
+                        "completed_date": joining.modified,
+                        "date_of_joining": joining.get("custom_date_of_joining"),
+                        "notes": "Candidate declined offer",
+                    }
+                )
             elif joining.get("offer_revoked") == 1:
-                statuses.append({
-                    "stage_id": "joining_confirmation",
-                    "status": "rejected",
-                    "completed_date": joining.modified,
-                    "date_of_joining": joining.get("custom_date_of_joining"),
-                    "notes": "Offer revoked by company"
-                })
+                statuses.append(
+                    {
+                        "stage_id": "joining_confirmation",
+                        "status": "rejected",
+                        "completed_date": joining.modified,
+                        "date_of_joining": joining.get("custom_date_of_joining"),
+                        "notes": "Offer revoked by company",
+                    }
+                )
             else:
-                statuses.append({
-                    "stage_id": "joining_confirmation",
-                    "status": "in_progress",
-                    "date_of_joining": joining.get("custom_date_of_joining"),
-                    "notes": "Awaiting joining confirmation"
-                })
+                statuses.append(
+                    {
+                        "stage_id": "joining_confirmation",
+                        "status": "in_progress",
+                        "date_of_joining": joining.get("custom_date_of_joining"),
+                        "notes": "Awaiting joining confirmation",
+                    }
+                )
         else:
-            offer_completed = any(s for s in statuses if s["stage_id"] == "offer_letter" and s["status"] == "completed")
-            statuses.append({
-                "stage_id": "joining_confirmation",
-                "status": "in_progress" if offer_completed else "pending",
-                "notes": "Waiting for joining confirmation" if offer_completed else "Complete offer letter first"
-            })
-        
+            offer_completed = any(
+                s
+                for s in statuses
+                if s["stage_id"] == "offer_letter" and s["status"] == "completed"
+            )
+            statuses.append(
+                {
+                    "stage_id": "joining_confirmation",
+                    "status": "in_progress" if offer_completed else "pending",
+                    "notes": (
+                        "Waiting for joining confirmation"
+                        if offer_completed
+                        else "Complete offer letter first"
+                    ),
+                }
+            )
+
         # Stage 6: Appointment Letter (UPDATED - now depends on joining confirmation)
         appointments = frappe.get_all(
             "Appointment Letter",
             filters={"applicant_name": candidate_id},
             fields=["name", "creation", "status", "date_of_joining"],
-            limit=1
+            limit=1,
         )
-        
+
         if appointments:
             appointment = appointments[0]
-            statuses.append({
-                "stage_id": "appointment_letter",
-                "status": "completed",
-                "completed_date": appointment.date_of_joining or appointment.creation,
-                "notes": f"Joining date: {appointment.date_of_joining}"
-            })
+            statuses.append(
+                {
+                    "stage_id": "appointment_letter",
+                    "status": "completed",
+                    "completed_date": appointment.date_of_joining
+                    or appointment.creation,
+                    "notes": f"Joining date: {appointment.date_of_joining}",
+                }
+            )
         else:
             # Only activate if candidate confirmed joining
-            joining_confirmed = any(s for s in statuses if s["stage_id"] == "joining_confirmation" and s["status"] == "completed")
-            statuses.append({
-                "stage_id": "appointment_letter",
-                "status": "in_progress" if joining_confirmed else "pending",
-                "notes": "Ready to send appointment letter" if joining_confirmed else "Candidate must confirm joining first"
-            })
-        
+            joining_confirmed = any(
+                s
+                for s in statuses
+                if s["stage_id"] == "joining_confirmation"
+                and s["status"] == "completed"
+            )
+            statuses.append(
+                {
+                    "stage_id": "appointment_letter",
+                    "status": "in_progress" if joining_confirmed else "pending",
+                    "notes": (
+                        "Ready to send appointment letter"
+                        if joining_confirmed
+                        else "Candidate must confirm joining first"
+                    ),
+                }
+            )
+
     except Exception as e:
         frappe.log_error(f"Error getting stage statuses for {candidate_id}: {str(e)}")
-    
+
     return statuses
 
 
@@ -297,9 +398,9 @@ def get_candidate_details(candidate_id):
     try:
         if not candidate_id:
             frappe.throw("Candidate ID is required")
-        
+
         candidate = frappe.get_doc("Job Applicant", candidate_id)
-        
+
         # Get related interviews
         interviews = frappe.get_all(
             "Interview",
@@ -313,23 +414,23 @@ def get_candidate_details(candidate_id):
                 "status",
                 "google_meet",
                 "custom_location",
-                "notes"
+                "notes",
             ],
-            order_by="scheduled_on desc"
+            order_by="scheduled_on desc",
         )
-        
+
         # Get stage statuses
         stage_statuses = get_candidate_stage_statuses(candidate_id)
-        
+
         candidate_dict = candidate.as_dict()
         candidate_dict["interviews"] = interviews
         candidate_dict["stage_statuses"] = stage_statuses
-        
+
         return {
             "message": "Candidate details fetched successfully",
-            "data": candidate_dict
+            "data": candidate_dict,
         }
-        
+
     except frappe.DoesNotExistError:
         frappe.throw(f"Candidate {candidate_id} not found")
     except Exception as e:
@@ -341,7 +442,9 @@ def get_candidate_details(candidate_id):
 def update_stage_status():
     """Update stage status for a candidate"""
     data = frappe.form_dict
-    frappe.log("Updating stage status: {data}".format(data=json.dumps(dict(data), indent=2)))
+    frappe.log(
+        "Updating stage status: {data}".format(data=json.dumps(dict(data), indent=2))
+    )
 
     candidate_id = data.get("candidate_id")
     stage_id = data.get("stage_id")
@@ -350,10 +453,10 @@ def update_stage_status():
 
     if not candidate_id:
         frappe.throw("Candidate ID is required")
-    
+
     if not stage_id:
         frappe.throw("Stage ID is required")
-    
+
     if not status:
         frappe.throw("Status is required")
 
@@ -364,43 +467,49 @@ def update_stage_status():
 
     try:
         # Validate stage_id
-        valid_stages = [s['id'] for s in RECRUITMENT_STAGES]
+        valid_stages = [s["id"] for s in RECRUITMENT_STAGES]
         if stage_id not in valid_stages:
             frappe.throw(f"Invalid stage ID. Must be one of: {', '.join(valid_stages)}")
-        
+
         candidate_doc = frappe.get_doc("Job Applicant", candidate_id)
-        
+
         # Update the recruitment stage
-        stage_label = next(s['label'] for s in RECRUITMENT_STAGES if s['id'] == stage_id)
+        stage_label = next(
+            s["label"] for s in RECRUITMENT_STAGES if s["id"] == stage_id
+        )
         candidate_doc.custom_recruitment_stage = stage_label
-        
+
         # Add note about the stage update
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        stage_note = f"\n\n[{timestamp}] Stage Update: {stage_label}\nStatus: {status}\n{notes}"
-        
+        stage_note = (
+            f"\n\n[{timestamp}] Stage Update: {stage_label}\nStatus: {status}\n{notes}"
+        )
+
         if candidate_doc.notes:
             candidate_doc.notes += stage_note
         else:
             candidate_doc.notes = stage_note
-        
-        candidate_doc.save(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
+
+        candidate_doc.save(
+            ignore_permissions=False
+        )  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
-        
+
         frappe.log(f"Updated stage {stage_id} for candidate {candidate_id}: {status}")
-        
+
         # Get updated stage statuses
         updated_statuses = get_candidate_stage_statuses(candidate_id)
-        
+
         return {
             "message": f"Stage {stage_label} updated to {status}",
             "data": {
                 "candidate_id": candidate_id,
                 "stage_id": stage_id,
                 "status": status,
-                "all_stage_statuses": updated_statuses
-            }
+                "all_stage_statuses": updated_statuses,
+            },
         }
-        
+
     except frappe.DoesNotExistError:
         frappe.throw(f"Candidate {candidate_id} not found")
     except Exception as e:
@@ -413,31 +522,31 @@ def get_stage_statistics():
     """Get statistics about candidates in each recruitment stage"""
     try:
         all_candidates = frappe.get_all("Job Applicant", fields=["name"])
-        
-        stage_stats = {stage['id']: {
-            'pending': 0,
-            'in_progress': 0,
-            'completed': 0,
-            'rejected': 0,
-            'join': 0,
-            'not_join': 0,
-            'offer_revoked': 0,
-            'label': stage['label']
-        } for stage in RECRUITMENT_STAGES}
-        
+
+        stage_stats = {
+            stage["id"]: {
+                "pending": 0,
+                "in_progress": 0,
+                "completed": 0,
+                "rejected": 0,
+                "join": 0,
+                "not_join": 0,
+                "offer_revoked": 0,
+                "label": stage["label"],
+            }
+            for stage in RECRUITMENT_STAGES
+        }
+
         for candidate in all_candidates:
             stage_statuses = get_candidate_stage_statuses(candidate.name)
             for stage_status in stage_statuses:
-                stage_id = stage_status['stage_id']
-                status = stage_status['status']
+                stage_id = stage_status["stage_id"]
+                status = stage_status["status"]
                 if stage_id in stage_stats and status in stage_stats[stage_id]:
                     stage_stats[stage_id][status] += 1
-        
-        return {
-            "message": "Stage statistics fetched successfully",
-            "data": stage_stats
-        }
-        
+
+        return {"message": "Stage statistics fetched successfully", "data": stage_stats}
+
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Stage Statistics Fetch Failed")
         frappe.throw(f"Failed to fetch stage statistics: {str(e)}")
@@ -449,12 +558,12 @@ def get_candidates_by_stage(stage_id, status=None):
     try:
         if not stage_id:
             frappe.throw("Stage ID is required")
-        
+
         # Validate stage_id
-        valid_stages = [s['id'] for s in RECRUITMENT_STAGES]
+        valid_stages = [s["id"] for s in RECRUITMENT_STAGES]
         if stage_id not in valid_stages:
             frappe.throw(f"Invalid stage ID. Must be one of: {', '.join(valid_stages)}")
-        
+
         all_candidates = frappe.get_all(
             "Job Applicant",
             fields=[
@@ -467,32 +576,36 @@ def get_candidates_by_stage(stage_id, status=None):
                 "status",
                 "location",
                 "creation",
-                "resume_score"
+                "resume_score",
             ],
-            order_by="creation desc"
+            order_by="creation desc",
         )
-        
+
         filtered_candidates = []
-        
+
         for candidate in all_candidates:
             stage_statuses = get_candidate_stage_statuses(candidate.name)
-            stage_status = next((s for s in stage_statuses if s['stage_id'] == stage_id), None)
-            
+            stage_status = next(
+                (s for s in stage_statuses if s["stage_id"] == stage_id), None
+            )
+
             if stage_status:
-                if status is None or stage_status['status'] == status:
-                    candidate['current_stage_status'] = stage_status
+                if status is None or stage_status["status"] == status:
+                    candidate["current_stage_status"] = stage_status
                     filtered_candidates.append(candidate)
-        
-        stage_label = next(s['label'] for s in RECRUITMENT_STAGES if s['id'] == stage_id)
-        
+
+        stage_label = next(
+            s["label"] for s in RECRUITMENT_STAGES if s["id"] == stage_id
+        )
+
         return {
             "message": f"Candidates in stage '{stage_label}' fetched successfully",
             "data": filtered_candidates,
             "total": len(filtered_candidates),
             "stage": stage_label,
-            "status_filter": status
+            "status_filter": status,
         }
-        
+
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Candidates By Stage Fetch Failed")
         frappe.throw(f"Failed to fetch candidates: {str(e)}")
@@ -502,14 +615,18 @@ def get_candidates_by_stage(stage_id, status=None):
 def advance_candidate_to_next_stage():
     """Automatically advance candidate to the next stage after completing current stage"""
     data = frappe.form_dict
-    frappe.log("Advancing candidate to next stage: {data}".format(data=json.dumps(dict(data), indent=2)))
+    frappe.log(
+        "Advancing candidate to next stage: {data}".format(
+            data=json.dumps(dict(data), indent=2)
+        )
+    )
 
     candidate_id = data.get("candidate_id")
     current_stage_id = data.get("current_stage_id")
 
     if not candidate_id:
         frappe.throw("Candidate ID is required")
-    
+
     if not current_stage_id:
         frappe.throw("Current stage ID is required")
 
@@ -520,51 +637,60 @@ def advance_candidate_to_next_stage():
 
     try:
         # Find current stage index
-        current_stage_index = next((i for i, s in enumerate(RECRUITMENT_STAGES) if s['id'] == current_stage_id), None)
-        
+        current_stage_index = next(
+            (
+                i
+                for i, s in enumerate(RECRUITMENT_STAGES)
+                if s["id"] == current_stage_id
+            ),
+            None,
+        )
+
         if current_stage_index is None:
             frappe.throw("Invalid current stage ID")
-        
+
         # Check if there's a next stage
         if current_stage_index >= len(RECRUITMENT_STAGES) - 1:
             return {
                 "message": "Candidate is already at the final stage",
                 "data": {
                     "candidate_id": candidate_id,
-                    "current_stage": RECRUITMENT_STAGES[current_stage_index]['label']
-                }
+                    "current_stage": RECRUITMENT_STAGES[current_stage_index]["label"],
+                },
             }
-        
+
         # Get next stage
         next_stage = RECRUITMENT_STAGES[current_stage_index + 1]
-        
+
         # Update candidate to next stage
         candidate_doc = frappe.get_doc("Job Applicant", candidate_id)
-        candidate_doc.custom_recruitment_stage = next_stage['label']
-        
+        candidate_doc.custom_recruitment_stage = next_stage["label"]
+
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         stage_note = f"\n\n[{timestamp}] Advanced to: {next_stage['label']}"
-        
+
         if candidate_doc.notes:
             candidate_doc.notes += stage_note
         else:
             candidate_doc.notes = stage_note
-        
-        candidate_doc.save(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
+
+        candidate_doc.save(
+            ignore_permissions=False
+        )  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
-        
+
         frappe.log(f"Advanced candidate {candidate_id} to stage: {next_stage['label']}")
-        
+
         return {
             "message": f"Candidate advanced to {next_stage['label']}",
             "data": {
                 "candidate_id": candidate_id,
-                "previous_stage": RECRUITMENT_STAGES[current_stage_index]['label'],
-                "current_stage": next_stage['label'],
-                "stage_id": next_stage['id']
-            }
+                "previous_stage": RECRUITMENT_STAGES[current_stage_index]["label"],
+                "current_stage": next_stage["label"],
+                "stage_id": next_stage["id"],
+            },
         }
-        
+
     except frappe.DoesNotExistError:
         frappe.throw(f"Candidate {candidate_id} not found")
     except Exception as e:
@@ -579,47 +705,60 @@ def get_recruitment_pipeline():
         all_candidates = frappe.get_all(
             "Job Applicant",
             fields=["name", "applicant_name", "status"],
-            order_by="creation desc"
+            order_by="creation desc",
         )
-        
+
         pipeline = []
-        
+
         for stage in RECRUITMENT_STAGES:
             candidates_in_stage = []
-            
+
             for candidate in all_candidates:
                 stage_statuses = get_candidate_stage_statuses(candidate.name)
-                current_stage_status = next((s for s in stage_statuses if s['stage_id'] == stage['id']), None)
-                
+                current_stage_status = next(
+                    (s for s in stage_statuses if s["stage_id"] == stage["id"]), None
+                )
+
                 if current_stage_status:
-                    if current_stage_status['status'] in ['in_progress', 'pending']:
+                    if current_stage_status["status"] in ["in_progress", "pending"]:
                         all_previous_completed = True
-                        for prev_stage in RECRUITMENT_STAGES[:stage['order']-1]:
-                            prev_status = next((s for s in stage_statuses if s['stage_id'] == prev_stage['id']), None)
-                            if not prev_status or prev_status['status'] != 'completed':
+                        for prev_stage in RECRUITMENT_STAGES[: stage["order"] - 1]:
+                            prev_status = next(
+                                (
+                                    s
+                                    for s in stage_statuses
+                                    if s["stage_id"] == prev_stage["id"]
+                                ),
+                                None,
+                            )
+                            if not prev_status or prev_status["status"] != "completed":
                                 all_previous_completed = False
                                 break
-                        
+
                         if all_previous_completed:
-                            candidates_in_stage.append({
-                                'id': candidate.name,
-                                'name': candidate.applicant_name,
-                                'status': current_stage_status['status']
-                            })
-            
-            pipeline.append({
-                'stage_id': stage['id'],
-                'stage_label': stage['label'],
-                'candidate_count': len(candidates_in_stage),
-                'candidates': candidates_in_stage[:5]
-            })
-        
+                            candidates_in_stage.append(
+                                {
+                                    "id": candidate.name,
+                                    "name": candidate.applicant_name,
+                                    "status": current_stage_status["status"],
+                                }
+                            )
+
+            pipeline.append(
+                {
+                    "stage_id": stage["id"],
+                    "stage_label": stage["label"],
+                    "candidate_count": len(candidates_in_stage),
+                    "candidates": candidates_in_stage[:5],
+                }
+            )
+
         return {
             "message": "Recruitment pipeline fetched successfully",
             "data": pipeline,
-            "total_candidates": len(all_candidates)
+            "total_candidates": len(all_candidates),
         }
-        
+
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Pipeline Fetch Failed")
         frappe.throw(f"Failed to fetch recruitment pipeline: {str(e)}")
@@ -639,32 +778,29 @@ def update_joining_confirmation():
     try:
         # Try to get JSON data first
         data = frappe.local.form_dict
-        
-        candidate_id = data.get('candidate_id')
-        status_type = data.get('status_type')
-        
+
+        candidate_id = data.get("candidate_id")
+        status_type = data.get("status_type")
+
         frappe.logger().info(f"=== UPDATE JOINING CONFIRMATION ===")
         frappe.logger().info(f"Candidate ID: {candidate_id}")
         frappe.logger().info(f"Status Type: {status_type}")
         frappe.logger().info(f"Full form dict: {frappe.local.form_dict}")
-        
+
         if not candidate_id:
+            return {"success": False, "message": "Candidate ID is required"}
+
+        if status_type not in ["join", "not_join", "offer_revoked"]:
             return {
                 "success": False,
-                "message": "Candidate ID is required"
+                "message": "Invalid status type. Must be: join, not_join, or offer_revoked",
             }
-        
-        if status_type not in ['join', 'not_join', 'offer_revoked']:
-            return {
-                "success": False,
-                "message": "Invalid status type. Must be: join, not_join, or offer_revoked"
-            }
-        
+
         # Check if a Joining Confirmation record already exists
         existing_records = frappe.get_all(
             "Joining Confirmation",
             filters={"candidate_id": candidate_id},
-            fields=["name"]
+            fields=["name"],
         )
 
         # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
@@ -673,36 +809,36 @@ def update_joining_confirmation():
         if not frappe.has_permission("Joining Confirmation", ptype=required_ptype):
             return {
                 "success": False,
-                "message": "You do not have permission to update joining confirmation"
+                "message": "You do not have permission to update joining confirmation",
             }
-        
+
         if existing_records:
             # Update existing record
-            frappe.logger().info(f"Updating existing record: {existing_records[0].name}")
+            frappe.logger().info(
+                f"Updating existing record: {existing_records[0].name}"
+            )
             doc = frappe.get_doc("Joining Confirmation", existing_records[0].name)
         else:
             # Create new record
             frappe.logger().info("Creating new record")
             doc = frappe.new_doc("Joining Confirmation")
             doc.candidate_id = candidate_id
-        
+
         # Reset all statuses
         doc.join = 0
         doc.not_join = 0
         doc.offer_revoked = 0
-        
+
         # Set the selected status
         setattr(doc, status_type, 1)
         frappe.logger().info(f"Setting {status_type} = 1")
-        
+
         # NEW: Auto-fetch Joining Date from Job Offer when candidate is joining.
         # Only auto-fill if the field is currently empty, so we never overwrite
         # a date the HR user has already manually edited.
-        if status_type == 'join' and not doc.custom_date_of_joining:
+        if status_type == "join" and not doc.custom_date_of_joining:
             offer_joining_date = frappe.db.get_value(
-                "Job Offer",
-                {"job_applicant": candidate_id},
-                "custom_joining_date"
+                "Job Offer", {"job_applicant": candidate_id}, "custom_joining_date"
             )
             if offer_joining_date:
                 doc.custom_date_of_joining = offer_joining_date
@@ -711,39 +847,43 @@ def update_joining_confirmation():
                 )
             else:
                 frappe.logger().info("No Job Offer joining date found to auto-fill")
-        
+
         # Clear date of joining if candidate is not joining or offer revoked
-        if status_type in ['not_join', 'offer_revoked']:
+        if status_type in ["not_join", "offer_revoked"]:
             doc.custom_date_of_joining = None
-            frappe.logger().info(f"Clearing custom_date_of_joining because status_type = {status_type}")
-        
+            frappe.logger().info(
+                f"Clearing custom_date_of_joining because status_type = {status_type}"
+            )
+
         # Save the document
-        doc.save(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
+        doc.save(
+            ignore_permissions=False
+        )  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
-        
+
         frappe.logger().info("=== SUCCESS ===")
-        
+
         return {
             "success": True,
             "message": f"Joining confirmation updated: {status_type.replace('_', ' ').title()}",
             "data": {
                 "candidate_id": candidate_id,
                 "status": status_type,
-                "date_of_joining": doc.custom_date_of_joining
-            }
+                "date_of_joining": doc.custom_date_of_joining,
+            },
         }
-        
+
     except Exception as e:
         frappe.logger().error(f"=== ERROR ===")
         frappe.logger().error(f"Error: {str(e)}")
         frappe.logger().error(f"Traceback: {frappe.get_traceback()}")
-        
+
         frappe.log_error(f"Error updating joining confirmation: {str(e)}")
         frappe.db.rollback()
-        
+
         return {
             "success": False,
-            "message": f"Failed to update joining confirmation: {str(e)}"
+            "message": f"Failed to update joining confirmation: {str(e)}",
         }
 
 
@@ -752,19 +892,22 @@ def update_candidate_field():
     """Update a single field on Job Applicant"""
     try:
         data = frappe.local.form_dict
-        candidate_id = data.get('candidate_id')
-        fieldname = data.get('fieldname')
-        value = data.get('value')
+        candidate_id = data.get("candidate_id")
+        fieldname = data.get("fieldname")
+        value = data.get("value")
 
         # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
         # frappe.db.set_value neeche seedha DB write karta hai aur permission engine ko
         # bypass kar deta hai, isliye yaha explicit check zaroori hai.
         if not frappe.has_permission("Job Applicant", ptype="write", doc=candidate_id):
-            return {"success": False, "message": "You do not have permission to update this candidate"}
-        
-        frappe.db.set_value('Job Applicant', candidate_id, fieldname, value)
+            return {
+                "success": False,
+                "message": "You do not have permission to update this candidate",
+            }
+
+        frappe.db.set_value("Job Applicant", candidate_id, fieldname, value)
         frappe.db.commit()
-        
+
         return {"success": True, "message": f"{fieldname} updated successfully"}
     except Exception as e:
         frappe.log_error(str(e))
@@ -784,8 +927,8 @@ def update_joining_date():
     """
     try:
         data = frappe.local.form_dict
-        candidate_id = data.get('candidate_id')
-        date_of_joining = data.get('date_of_joining')
+        candidate_id = data.get("candidate_id")
+        date_of_joining = data.get("date_of_joining")
 
         if not candidate_id:
             return {"success": False, "message": "Candidate ID is required"}
@@ -793,13 +936,16 @@ def update_joining_date():
         existing_records = frappe.get_all(
             "Joining Confirmation",
             filters={"candidate_id": candidate_id},
-            fields=["name"]
+            fields=["name"],
         )
 
         # NEW: Permission check — dynamic Role Permissions Manager settings ke hisaab se.
         required_ptype = "write" if existing_records else "create"
         if not frappe.has_permission("Joining Confirmation", ptype=required_ptype):
-            return {"success": False, "message": "You do not have permission to update the date of joining"}
+            return {
+                "success": False,
+                "message": "You do not have permission to update the date of joining",
+            }
 
         if existing_records:
             doc = frappe.get_doc("Joining Confirmation", existing_records[0].name)
@@ -808,14 +954,21 @@ def update_joining_date():
             doc.candidate_id = candidate_id
 
         doc.custom_date_of_joining = date_of_joining
-        doc.save(ignore_permissions=False)  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
+        doc.save(
+            ignore_permissions=False
+        )  # CHANGED: True se False kiya, taaki Frappe ka internal permission engine bhi check kare (double-safety)
         frappe.db.commit()
 
-        return {"success": True, "message": "Date of joining updated successfully", "data": {"date_of_joining": date_of_joining}}
+        return {
+            "success": True,
+            "message": "Date of joining updated successfully",
+            "data": {"date_of_joining": date_of_joining},
+        }
     except Exception as e:
         frappe.log_error(str(e))
         frappe.db.rollback()
         return {"success": False, "message": str(e)}
+
 
 def _load_fit_prompt():
     path = frappe.get_app_path(
@@ -837,17 +990,26 @@ def analyze_fit_for_job():
     job_opening = data.get("job_opening")
 
     if not candidate_id or not job_opening:
-        return {"success": False, "message": "candidate_id and job_opening are required."}
+        return {
+            "success": False,
+            "message": "candidate_id and job_opening are required.",
+        }
 
     # NEW: Permission check — is file ke baaki functions jaisa hi pattern
     if not frappe.has_permission("Job Applicant", ptype="write", doc=candidate_id):
-        return {"success": False, "message": "You do not have permission to update this candidate."}
+        return {
+            "success": False,
+            "message": "You do not have permission to update this candidate.",
+        }
 
     try:
         applicant = frappe.get_doc("Job Applicant", candidate_id)
         parsed_raw = applicant.get("custom_parsed_json")
         if not parsed_raw:
-            return {"success": False, "message": "No parsed resume data found for this candidate."}
+            return {
+                "success": False,
+                "message": "No parsed resume data found for this candidate.",
+            }
 
         try:
             parsed = json.loads(parsed_raw)
@@ -869,22 +1031,20 @@ def analyze_fit_for_job():
             "location": parsed.get("location"),
         }
 
-        api_key = (
-            frappe.utils.password.get_decrypted_password(
-                "ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False
-            )
-            or frappe.conf.get("gemini_api_key")
-        )
+        api_key = frappe.utils.password.get_decrypted_password(
+            "ATS Settings", "ATS Settings", "gemini_api_key", raise_exception=False
+        ) or frappe.conf.get("gemini_api_key")
         if not api_key:
             return {"success": False, "message": "Gemini API key not configured."}
 
         genai.configure(api_key=api_key)
         prompt_template = _load_fit_prompt()
         prompt = (
-            prompt_template
-            .replace("{{JOB_TITLE}}", job_title or "N/A")
+            prompt_template.replace("{{JOB_TITLE}}", job_title or "N/A")
             .replace("{{JOB_DESCRIPTION}}", job_description or "N/A")
-            .replace("{{CANDIDATE_JSON}}", json.dumps(candidate_summary, ensure_ascii=False))
+            .replace(
+                "{{CANDIDATE_JSON}}", json.dumps(candidate_summary, ensure_ascii=False)
+            )
         )
 
         def _call():
@@ -898,7 +1058,11 @@ def analyze_fit_for_job():
         result = _call_gemini_with_retry(_call)
 
         allowed_fit_levels = ["Strong Fit", "Moderate Fit", "Weak Fit"]
-        fit_level = result.get("fit_level") if result.get("fit_level") in allowed_fit_levels else ""
+        fit_level = (
+            result.get("fit_level")
+            if result.get("fit_level") in allowed_fit_levels
+            else ""
+        )
         score = result.get("score")
         if score is None:
             score = 0
@@ -913,7 +1077,8 @@ def analyze_fit_for_job():
 
         # ── Job Applicant doctype ki asal fields + custom_parsed_json dono save ──
         frappe.db.set_value(
-            "Job Applicant", candidate_id,
+            "Job Applicant",
+            candidate_id,
             {
                 "fit_level": fit_level,
                 "score": score,
@@ -934,9 +1099,12 @@ def analyze_fit_for_job():
         }
 
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), f"analyze_fit_for_job failed: {candidate_id}")
+        frappe.log_error(
+            frappe.get_traceback(), f"analyze_fit_for_job failed: {candidate_id}"
+        )
         frappe.db.rollback()
         return {"success": False, "message": str(e)[:300]}
+
 
 @frappe.whitelist()
 def clear_fit_analysis():
@@ -948,7 +1116,10 @@ def clear_fit_analysis():
         return {"success": False, "message": "candidate_id is required."}
 
     if not frappe.has_permission("Job Applicant", ptype="write", doc=candidate_id):
-        return {"success": False, "message": "You do not have permission to update this candidate."}
+        return {
+            "success": False,
+            "message": "You do not have permission to update this candidate.",
+        }
 
     try:
         applicant = frappe.get_doc("Job Applicant", candidate_id)
@@ -976,14 +1147,18 @@ def clear_fit_analysis():
         if parsed_raw:
             update_values["custom_parsed_json"] = parsed_json_str
 
-        frappe.db.set_value("Job Applicant", candidate_id, update_values, update_modified=False)
+        frappe.db.set_value(
+            "Job Applicant", candidate_id, update_values, update_modified=False
+        )
         frappe.db.commit()
 
         return {"success": True}
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), f"clear_fit_analysis failed: {candidate_id}")
+        frappe.log_error(
+            frappe.get_traceback(), f"clear_fit_analysis failed: {candidate_id}"
+        )
         frappe.db.rollback()
-        return {"success": False, "message": str(e)[:300]}    
+        return {"success": False, "message": str(e)[:300]}
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1011,16 +1186,20 @@ def _can_share_candidate(name):
         return True
 
     if _is_candidate_share_recipient(name):
-        return bool(frappe.db.get_value(
-            "DocShare",
-            {"share_doctype": CANDIDATE_SHARE_DOCTYPE, "share_name": name,
-             "user": frappe.session.user, "everyone": 0},
-            "share",
-        ))
+        return bool(
+            frappe.db.get_value(
+                "DocShare",
+                {
+                    "share_doctype": CANDIDATE_SHARE_DOCTYPE,
+                    "share_name": name,
+                    "user": frappe.session.user,
+                    "everyone": 0,
+                },
+                "share",
+            )
+        )
 
     return bool(frappe.has_permission(CANDIDATE_SHARE_DOCTYPE, ptype="read", doc=name))
-
-
 
 
 def _is_candidate_share_recipient(name):
@@ -1072,7 +1251,12 @@ def _remove_candidate_share(name, user):
     """
     frappe.db.delete(
         "DocShare",
-        {"share_doctype": CANDIDATE_SHARE_DOCTYPE, "share_name": name, "user": user, "everyone": 0},
+        {
+            "share_doctype": CANDIDATE_SHARE_DOCTYPE,
+            "share_name": name,
+            "user": user,
+            "everyone": 0,
+        },
     )
     # Shared user ki permission cache saaf karo
     frappe.clear_cache(user=user)
@@ -1084,7 +1268,11 @@ def _get_candidate_shares(name, shared_by=None):
     Is candidate ke user-wise shares (Everyone wali row chhodkar).
     shared_by diya ho to sirf wahi shares jo us user ne banaye (DocShare ka owner = jisne share kiya).
     """
-    filters = {"share_doctype": CANDIDATE_SHARE_DOCTYPE, "share_name": name, "everyone": 0}
+    filters = {
+        "share_doctype": CANDIDATE_SHARE_DOCTYPE,
+        "share_name": name,
+        "everyone": 0,
+    }
     if shared_by:
         filters["owner"] = shared_by
 
@@ -1128,7 +1316,8 @@ def _get_candidate_shares(name, shared_by=None):
 #     """
 #     if _is_candidate_share_recipient(name):
 #         return _get_candidate_shares(name, shared_by=frappe.session.user)
-#     return _get_candidate_shares(name)  
+#     return _get_candidate_shares(name)
+
 
 def _visible_candidate_shares(name):
     if _is_candidate_share_recipient(name):
@@ -1141,13 +1330,27 @@ def get_candidate_share_access(name):
     """Share button chalega ya disabled hoga (can_share) aur list kitni dikhani hai (only_mine)."""
     try:
         if not frappe.db.exists(CANDIDATE_SHARE_DOCTYPE, name):
-            return {"success": False, "can_share": False, "can_view_list": False, "only_mine": False, "message": "Candidate not found"}
+            return {
+                "success": False,
+                "can_share": False,
+                "can_view_list": False,
+                "only_mine": False,
+                "message": "Candidate not found",
+            }
 
         return {"success": True, **_candidate_share_access(name)}
 
     except Exception as e:
-        frappe.log_error(title="Get Candidate Share Access Error", message=frappe.get_traceback())
-        return {"success": False, "can_share": False, "can_view_list": False, "only_mine": False, "message": str(e)}
+        frappe.log_error(
+            title="Get Candidate Share Access Error", message=frappe.get_traceback()
+        )
+        return {
+            "success": False,
+            "can_share": False,
+            "can_view_list": False,
+            "only_mine": False,
+            "message": str(e),
+        }
 
 
 @frappe.whitelist()
@@ -1158,7 +1361,11 @@ def get_candidate_shares(name):
             return {"success": False, "data": [], "message": "Candidate not found"}
 
         if not frappe.has_permission(CANDIDATE_SHARE_DOCTYPE, ptype="read", doc=name):
-            return {"success": False, "data": [], "message": "You do not have permission to view this candidate"}
+            return {
+                "success": False,
+                "data": [],
+                "message": "You do not have permission to view this candidate",
+            }
 
         # Share permission nahi hai to list nahi; hai to _visible_candidate_shares ke hisaab se
         access = _candidate_share_access(name)
@@ -1168,7 +1375,9 @@ def get_candidate_shares(name):
         return {"success": True, "data": _visible_candidate_shares(name), **access}
 
     except Exception as e:
-        frappe.log_error(title="Get Candidate Shares Error", message=frappe.get_traceback())
+        frappe.log_error(
+            title="Get Candidate Shares Error", message=frappe.get_traceback()
+        )
         return {"success": False, "data": [], "message": str(e)}
 
 
@@ -1186,7 +1395,10 @@ def set_candidate_share(name, user, read=0, write=0, share=0, submit=0):
             return {"success": False, "message": "Candidate not found"}
 
         if not _can_share_candidate(name):
-            return {"success": False, "message": "You do not have permission to share this candidate"}
+            return {
+                "success": False,
+                "message": "You do not have permission to share this candidate",
+            }
 
         if not frappe.db.exists("User", {"name": user, "enabled": 1}):
             return {"success": False, "message": "Selected user not found or disabled"}
@@ -1197,11 +1409,19 @@ def set_candidate_share(name, user, read=0, write=0, share=0, submit=0):
         if _is_candidate_share_recipient(name):
             existing_owner = frappe.db.get_value(
                 "DocShare",
-                {"share_doctype": CANDIDATE_SHARE_DOCTYPE, "share_name": name, "user": user, "everyone": 0},
+                {
+                    "share_doctype": CANDIDATE_SHARE_DOCTYPE,
+                    "share_name": name,
+                    "user": user,
+                    "everyone": 0,
+                },
                 "owner",
             )
             if existing_owner and existing_owner != frappe.session.user:
-                return {"success": False, "message": "This user already has access to this candidate"}
+                return {
+                    "success": False,
+                    "message": "This user already has access to this candidate",
+                }
 
         read, write, share = _share_flag(read), _share_flag(write), _share_flag(share)
         submit = 0  # Job Applicant submittable nahi hai, isliye hamesha 0
@@ -1231,16 +1451,23 @@ def set_candidate_share(name, user, read=0, write=0, share=0, submit=0):
 
     except Exception as e:
         frappe.db.rollback()
-        frappe.log_error(title="Set Candidate Share Error", message=frappe.get_traceback())
+        frappe.log_error(
+            title="Set Candidate Share Error", message=frappe.get_traceback()
+        )
         return {"success": False, "message": str(e)}
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 
+
 @frappe.whitelist()
-def get_candidates_with_stages(page=1, page_size=10, search="", status="all", designation="all", job_opening=""):
+def get_candidates_with_stages(
+    page=1, page_size=10, search="", status="all", designation="all", job_opening=""
+):
     page = int(page)
     page_size = int(page_size)
     limit_start = (page - 1) * page_size
-    
+
     # 1. Filters Setup
     filters = {}
     if status and status != "all":
@@ -1257,15 +1484,15 @@ def get_candidates_with_stages(page=1, page_size=10, search="", status="all", de
             "Job Opening",
             filters=[["job_title", "like", f"%{search}%"]],
             pluck="name",
-            limit_page_length=0
+            limit_page_length=0,
         )
-        
+
         or_filters = [
             ["applicant_name", "like", f"%{search}%"],
             ["email_id", "like", f"%{search}%"],
-            ["phone_number", "like", f"%{search}%"]
+            ["phone_number", "like", f"%{search}%"],
         ]
-        
+
         # 2. अगर कोई जॉब टाइटल मैच हुआ है, तो उसकी ID को सर्च में जोड़ें
         if matching_job_openings:
             or_filters.append(["job_title", "in", matching_job_openings])
@@ -1275,15 +1502,36 @@ def get_candidates_with_stages(page=1, page_size=10, search="", status="all", de
 
     # 2. Fetch Candidates (Fields match exactly your frontend requirement)
     fields = [
-        "name", "applicant_name", "email_id", "phone_number", "job_title", 
-        "designation", "status", "country", "location", "custom_location", 
-        "custom_address", "address", "source", "notes", "resume_link", 
-        "cover_letter", "creation", "modified", "resume_score", 
-        "custom_recruitment_stage", "justification_by_ai", "applicant_rating", 
-        "fit_level", "score", "custom_current_company", 
-        "custom_total_experience", "resume_attachment", "owner"
+        "name",
+        "applicant_name",
+        "email_id",
+        "phone_number",
+        "job_title",
+        "designation",
+        "status",
+        "country",
+        "location",
+        "custom_location",
+        "custom_address",
+        "address",
+        "source",
+        "notes",
+        "resume_link",
+        "cover_letter",
+        "creation",
+        "modified",
+        "resume_score",
+        "custom_recruitment_stage",
+        "justification_by_ai",
+        "applicant_rating",
+        "fit_level",
+        "score",
+        "custom_current_company",
+        "custom_total_experience",
+        "resume_attachment",
+        "owner",
     ]
-    
+
     candidates = frappe.get_list(
         "Job Applicant",
         fields=fields,
@@ -1291,26 +1539,45 @@ def get_candidates_with_stages(page=1, page_size=10, search="", status="all", de
         or_filters=or_filters,
         limit_start=limit_start,
         limit_page_length=page_size,
-        order_by="creation desc"
+        order_by="creation desc",
     )
-    
-        # 1. पूरे फ़िल्टर किए गए डेटा के IDs निकालें (Stats के लिए जरुरी है)
-    all_candidate_ids = [d.name for d in frappe.get_all(
-        "Job Applicant",
-        filters=filters,
-        or_filters=or_filters,
-        fields=["name"],
-        limit_page_length=0
-    )]
+
+    # 1. पूरे फ़िल्टर किए गए डेटा के IDs निकालें (Stats के लिए जरुरी है)
+    all_candidate_ids = [
+        d.name
+        for d in frappe.get_list(
+            "Job Applicant",
+            filters=filters,
+            or_filters=or_filters,
+            fields=["name"],
+            limit_page_length=0,
+        )
+    ]
     total_count = len(all_candidate_ids)
 
     # 2. पूरे डेटा के हिसाब से Stats निकालें
     if all_candidate_ids:
-        pending_interview_count = frappe.db.count("Interview", filters={"job_applicant": ["in", all_candidate_ids], "status": "Pending"})
-        doc_verification_count = frappe.db.count("Applicant Document", filters={"applicant_name": ["in", all_candidate_ids]})
-        offer_letter_count = frappe.db.count("Job Offer", filters={"job_applicant": ["in", all_candidate_ids], "status": ["like", "%accept%"]})
-        joining_confirmation_count = frappe.db.count("Joining Confirmation", filters={"candidate_id": ["in", all_candidate_ids], "join": 1})
-        appointment_letter_count = frappe.db.count("Appointment Letter", filters={"job_applicant": ["in", all_candidate_ids]})
+        pending_interview_count = frappe.db.count(
+            "Interview",
+            filters={"job_applicant": ["in", all_candidate_ids], "status": "Pending"},
+        )
+        doc_verification_count = frappe.db.count(
+            "Applicant Document", filters={"applicant_name": ["in", all_candidate_ids]}
+        )
+        offer_letter_count = frappe.db.count(
+            "Job Offer",
+            filters={
+                "job_applicant": ["in", all_candidate_ids],
+                "status": ["like", "%accept%"],
+            },
+        )
+        joining_confirmation_count = frappe.db.count(
+            "Joining Confirmation",
+            filters={"candidate_id": ["in", all_candidate_ids], "join": 1},
+        )
+        appointment_letter_count = frappe.db.count(
+            "Appointment Letter", filters={"job_applicant": ["in", all_candidate_ids]}
+        )
         completed_count = appointment_letter_count
     else:
         pending_interview_count = 0
@@ -1319,66 +1586,147 @@ def get_candidates_with_stages(page=1, page_size=10, search="", status="all", de
         joining_confirmation_count = 0
         appointment_letter_count = 0
         completed_count = 0
-    
+
     if not candidates:
-        return {"success": True, "data": [], "total_count": total_count, "pending_interview_count": 0}
+        return {
+            "success": True,
+            "data": [],
+            "total_count": total_count,
+            "pending_interview_count": 0,
+        }
 
     candidate_ids = [c.name for c in candidates]
 
     # 3. Bulk Fetch Stage Data (Only for the current page's 10 candidates)
-    interviews = frappe.get_all("Interview", filters={"job_applicant": ("in", candidate_ids)}, fields=["job_applicant", "status", "scheduled_on"])
-    feedbacks = frappe.get_all("Interview Feedback", filters={"job_applicant": ("in", candidate_ids)}, fields=["job_applicant"])
-    docs = frappe.get_all("Applicant Document", filters={"applicant_name": ("in", candidate_ids)}, fields=["applicant_name"])
-    offers = frappe.get_all("Job Offer", filters={"job_applicant": ("in", candidate_ids)}, fields=["job_applicant", "status"])
-    joinings = frappe.get_all("Joining Confirmation", filters={"candidate_id": ("in", candidate_ids)}, fields=["candidate_id", "join", "not_join", "offer_revoked", "modified", "custom_date_of_joining"])
-    appointments = frappe.get_all("Appointment Letter", filters={"job_applicant": ("in", candidate_ids)}, fields=["job_applicant"])
+    interviews = frappe.get_all(
+        "Interview",
+        filters={"job_applicant": ("in", candidate_ids)},
+        fields=["job_applicant", "status", "scheduled_on"],
+    )
+    feedbacks = frappe.get_all(
+        "Interview Feedback",
+        filters={"job_applicant": ("in", candidate_ids)},
+        fields=["job_applicant"],
+    )
+    docs = frappe.get_all(
+        "Applicant Document",
+        filters={"applicant_name": ("in", candidate_ids)},
+        fields=["applicant_name"],
+    )
+    offers = frappe.get_all(
+        "Job Offer",
+        filters={"job_applicant": ("in", candidate_ids)},
+        fields=["job_applicant", "status"],
+    )
+    joinings = frappe.get_all(
+        "Joining Confirmation",
+        filters={"candidate_id": ("in", candidate_ids)},
+        fields=[
+            "candidate_id",
+            "join",
+            "not_join",
+            "offer_revoked",
+            "modified",
+            "custom_date_of_joining",
+        ],
+    )
+    appointments = frappe.get_all(
+        "Appointment Letter",
+        filters={"job_applicant": ("in", candidate_ids)},
+        fields=["job_applicant"],
+    )
 
     # 4. Merge Data
     for c in candidates:
         statuses = []
-        
+
         # Interview
         c_interviews = [i for i in interviews if i.job_applicant == c.name]
         if c_interviews:
-            has_completed = any(i.status in ['Completed', 'Cleared'] for i in c_interviews)
-            statuses.append({"stage_id": "interview", "status": "completed" if has_completed else "in_progress"})
+            has_completed = any(
+                i.status in ["Completed", "Cleared"] for i in c_interviews
+            )
+            statuses.append(
+                {
+                    "stage_id": "interview",
+                    "status": "completed" if has_completed else "in_progress",
+                }
+            )
         else:
             statuses.append({"stage_id": "interview", "status": "pending"})
 
         # Feedback
-        statuses.append({"stage_id": "feedback", "status": "completed" if any(f.job_applicant == c.name for f in feedbacks) else "pending"})
-        
+        statuses.append(
+            {
+                "stage_id": "feedback",
+                "status": (
+                    "completed"
+                    if any(f.job_applicant == c.name for f in feedbacks)
+                    else "pending"
+                ),
+            }
+        )
+
         # Doc Verification
-        statuses.append({"stage_id": "document_verification", "status": "completed" if any(d.applicant_name == c.name for d in docs) else "pending"})
-        
+        statuses.append(
+            {
+                "stage_id": "document_verification",
+                "status": (
+                    "completed"
+                    if any(d.applicant_name == c.name for d in docs)
+                    else "pending"
+                ),
+            }
+        )
+
         # Offer Letter
         c_offer = next((o for o in offers if o.job_applicant == c.name), None)
         offer_status = "pending"
         if c_offer:
             s = (c_offer.status or "").lower()
-            if "accept" in s: offer_status = "completed"
-            elif "reject" in s: offer_status = "rejected"
-            else: offer_status = "in_progress"
+            if "accept" in s:
+                offer_status = "completed"
+            elif "reject" in s:
+                offer_status = "rejected"
+            else:
+                offer_status = "in_progress"
         statuses.append({"stage_id": "offer_letter", "status": offer_status})
-        
+
         # Joining
         c_joining = next((j for j in joinings if j.candidate_id == c.name), None)
         joining_status = "pending"
         joining_date = ""
         if c_joining:
-            if c_joining.join == 1: joining_status = "completed"
-            elif c_joining.offer_revoked == 1: joining_status = "rejected"
+            if c_joining.join == 1:
+                joining_status = "completed"
+            elif c_joining.offer_revoked == 1:
+                joining_status = "rejected"
             joining_date = c_joining.custom_date_of_joining or ""
-        statuses.append({"stage_id": "joining_confirmation", "status": joining_status, "completed_date": c_joining.modified if c_joining else None})
-        
+        statuses.append(
+            {
+                "stage_id": "joining_confirmation",
+                "status": joining_status,
+                "completed_date": c_joining.modified if c_joining else None,
+            }
+        )
+
         # Appointment
-        statuses.append({"stage_id": "appointment_letter", "status": "completed" if any(a.job_applicant == c.name for a in appointments) else "pending"})
+        statuses.append(
+            {
+                "stage_id": "appointment_letter",
+                "status": (
+                    "completed"
+                    if any(a.job_applicant == c.name for a in appointments)
+                    else "pending"
+                ),
+            }
+        )
 
         c["stage_statuses"] = statuses
         c["custom_date_of_joining"] = joining_date
-        c["id"] = c.name # For frontend compatibility
+        c["id"] = c.name  # For frontend compatibility
 
-        return {
+    return {
         "success": True,
         "data": candidates,
         "total_count": total_count,
@@ -1388,6 +1736,6 @@ def get_candidates_with_stages(page=1, page_size=10, search="", status="all", de
             "completed_count": completed_count,
             "offer_letter_count": offer_letter_count,
             "joining_confirmation_count": joining_confirmation_count,
-            "appointment_letter_count": appointment_letter_count
-        }
+            "appointment_letter_count": appointment_letter_count,
+        },
     }
